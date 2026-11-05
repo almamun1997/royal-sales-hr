@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="bn"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Royal Sales - test</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#F4F6FA;color:#0F172A}
+.card{max-width:520px;margin:0 auto 16px;background:#fff;border:1px solid #E3E7EF;border-radius:14px;padding:16px}
+h1{font-size:20px;margin:0 0 12px;color:#283891}h2{font-size:16px;margin:0 0 8px}
+button{min-height:44px;padding:0 16px;font-size:16px;border:0;border-radius:10px;background:#F15A29;color:#0F172A;font-weight:700}
+pre{background:#F4F6FA;padding:12px;white-space:pre-wrap;border-radius:8px}
+video{width:100%;border-radius:10px;background:#000;margin-top:8px}
+</style></head><body>
+<div class="card"><h1>Royal Sales - test</h1>
+<h2>Test 1: Google login</h2>
+<div id="g"></div>
+<pre id="who">(not logged in)</pre></div>
+<div class="card"><h2>Test 2: camera and QR</h2>
+<button id="camBtn">Open camera</button>
+<video id="v" playsinline muted></video>
+<canvas id="c" hidden></canvas>
+<pre id="cam">(not run)</pre></div>
+<script>
+// === Fill these two values ===
+const CLIENT_ID = 'PASTE_CLIENT_ID_HERE';
+const SCRIPT_URL = 'PASTE_WEB_APP_URL_HERE';
+// =============================
+function onCred(resp){
+  const o=document.getElementById('who'); o.textContent='Checking...';
+  fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({idToken:resp.credential})})
+   .then(r=>r.json()).then(j=>{o.textContent=JSON.stringify(j,null,2);})
+   .catch(e=>{o.textContent='Request failed: '+e;});
+}
+window.addEventListener('load',()=>{
+  const t=setInterval(()=>{ if(window.google&&google.accounts){clearInterval(t);
+    google.accounts.id.initialize({client_id:CLIENT_ID,callback:onCred});
+    google.accounts.id.renderButton(document.getElementById('g'),{theme:'outline',size:'large'});
+  }},200);
+});
+document.getElementById('camBtn').onclick=async()=>{
+  const o=document.getElementById('cam'),v=document.getElementById('v');
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    v.srcObject=s;await v.play();
+    const det=('BarcodeDetector' in window)?new BarcodeDetector({formats:['qr_code']}):null;
+    o.textContent='Camera works. Reader: '+(det?'BarcodeDetector':'jsQR');
+    const cv=document.getElementById('c'),cx=cv.getContext('2d',{willReadFrequently:true});
+    setInterval(async()=>{
+      try{
+        if(det){const r=await det.detect(v);if(r.length){o.textContent='QR read: '+r[0].rawValue;}}
+        else if(v.videoWidth){cv.width=v.videoWidth;cv.height=v.videoHeight;cx.drawImage(v,0,0);
+          const d=cx.getImageData(0,0,cv.width,cv.height);const q=jsQR(d.data,d.width,d.height);
+          if(q)o.textContent='QR read: '+q.data;}
+      }catch(e){}
+    },400);
+  }catch(e){o.textContent='Camera FAILED: '+e.name+' - '+e.message;}
+};
+</script></body></html>
