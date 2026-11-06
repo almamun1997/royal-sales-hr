@@ -3,6 +3,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Royal Sales HR</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="idcard.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--blue:#283891;--navy:#0F1F4D;--orange:#F15A29;--ink:#0F172A;--mute:#5B6577;--line:#E3E7EF;--bg:#F4F6FA}
@@ -49,6 +52,8 @@ dt{color:var(--mute)}dd{margin:0;font-weight:600}
 .avatar{width:110px;height:110px;border-radius:50%;background:#E3E7F5;color:var(--blue);font-size:44px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden;margin:0 auto}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .ok{color:#0F6B3E}
+.cardpv{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0}.cardpv canvas{width:216px;max-width:46%;height:auto;border-radius:14px;box-shadow:0 4px 16px rgba(15,31,77,.2)}
+textarea{width:100%;min-height:90px;padding:10px 12px;border:1px solid #CBD3E1;border-radius:10px;font-family:inherit;font-size:14px}
 button,select,summary,label[for],a,.btn,input[type=file]{cursor:pointer}
 button:disabled{cursor:not-allowed}
 nav a,.btn,button,.card,tbody tr,.fld input,.fld select{transition:background-color .18s ease,color .18s ease,box-shadow .2s ease,transform .15s ease,border-color .18s ease}
@@ -87,6 +92,8 @@ tbody tr:hover{background:#F7F9FD}
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
     <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
     <a id="navDes" class="hide" href="#/designations">পদবী</a>
+    <a id="navCards" class="hide" href="#/cards">আইডি কার্ড</a>
+    <a id="navCo" class="hide" href="#/company">কোম্পানির তথ্য</a>
     <div class="me"><div id="meName"></div><div id="meRole"></div><button id="logout">লগআউট</button></div>
   </nav>
   <main id="view" aria-live="polite"></main>
@@ -133,6 +140,8 @@ async function start(){
     $('meRole').textContent = ROLE[ME.role] || ME.role;
     $('navUsers').classList.toggle('hide', !ME.can.sa);
     $('navDes').classList.toggle('hide', !ME.can.sa);
+    $('navCards').classList.toggle('hide', !ME.can.sa);
+    $('navCo').classList.toggle('hide', !ME.can.sa);
     $('login').classList.add('hide'); $('app').classList.remove('hide');
     route();
   }catch(e){
@@ -174,6 +183,8 @@ function route(){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
   const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
+  if(h==='#/cards'){ $('navCards').classList.add('on'); cardsPage(); return; }
+  if(h==='#/company'){ $('navCo').classList.add('on'); companyPage(); return; }
   if(h==='#/designations'){ $('navDes').classList.add('on'); designationsPage(); return; }
   if(h==='#/new'){ $('navEmp').classList.add('on'); newEmployee(); return; }
   if(h==='#/users'){ $('navUsers').classList.add('on'); usersPage(); return; }
@@ -264,7 +275,7 @@ async function profile(id){
     const canEx = id===ME.employee_id || ME.can.sa;
     const photo = r.has_photo ? api('photo.get',{id}).catch(()=>null) : Promise.resolve(null);
     const canPhoto = ME.can.editOthers || id===ME.employee_id;
-    let hist=null, mode='view', panel='';
+    let hist=null, mode='view', panel='', cardRes=null, cardLang='bn', cardPanel=false, cardCanv=null;
     const f=(k,val)=>'<dt>'+k+'</dt><dd>'+(val?esc(val):'<span class="muted">এখনও দেওয়া হয়নি</span>')+'</dd>';
     const today=new Date().toISOString().slice(0,10);
     const draw=()=>{
@@ -285,6 +296,11 @@ async function profile(id){
         const val=x=>{ const h=linkOf(x.value); return h?'<a href="'+esc(h)+'" target="_blank" rel="noopener noreferrer">'+esc(x.value)+'</a>':esc(x.value); };
         h += '<div class="card"><h2>অতিরিক্ত তথ্য</h2>'+(EX.length?'<dl>'+EX.map(x=>'<dt>'+esc(x.label)+'</dt><dd style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="word-break:break-word">'+val(x)+'</span>'+(canEx?'<button class="btn" style="min-height:36px;font-size:13px" data-xe="'+esc(x.extra_id)+'">সম্পাদনা</button><button class="btn" style="min-height:36px;font-size:13px;border-color:#9B1C1C;color:#9B1C1C" data-xd="'+esc(x.extra_id)+'">মুছুন</button>':'')+'</dd>').join('')+'</dl>':'<p class="muted">এখনও কোনো অতিরিক্ত তথ্য নেই।</p>')+
           (canEx?'<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px"><div class="grid"><div class="fld"><label for="x_l">ঘরের নাম (যেমন: ফেসবুক লিংক)</label><input id="x_l" type="text" list="x_dl" value="'+esc(exEdit?exEdit.label:'')+'"><datalist id="x_dl"><option value="ফেসবুক লিংক"><option value="ইনস্টাগ্রাম লিংক"><option value="লিংকডইন লিংক"><option value="হোয়াটসঅ্যাপ নম্বর"><option value="ইমেইল"><option value="রক্তের গ্রুপ"></datalist></div><div class="fld"><label for="x_v">মান</label><input id="x_v" type="text" value="'+esc(exEdit?exEdit.value:'')+'"></div></div><div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="xGo">'+(exEdit?'হালনাগাদ করুন':'+ নতুন তথ্য যোগ')+'</button>'+(exEdit?'<button class="btn" id="xCancel">বাতিল</button>':'')+'<span class="muted" style="align-self:center">সর্বোচ্চ ২০টি</span></div></div>':'')+'</div>';
+      }
+      if(id===ME.employee_id || ME.can.sa){
+        const issued=!!r.card_issued_at;
+        h += '<div class="card"><h2>আইডি কার্ড</h2>'+(issued?'<p class="muted">কার্ড তৈরি: '+esc(r.card_issued_at)+' · সংস্করণ '+esc(r.card_version||1)+'</p><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="muted" for="cLang">ভাষা</label>'+sel('cLang',[{v:'bn',t:'বাংলা'},{v:'en',t:'English'}],cardLang,false)+'</div><div id="cardPv" class="cardpv"><span class="muted">লোড হচ্ছে...</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="cPdf">PDF ডাউনলোড</button><button class="btn" id="cPf">সামনের ছবি (PNG)</button><button class="btn" id="cPb">পেছনের ছবি (PNG)</button></div>':'<p class="muted">'+(ME.can.sa?'কার্ড এখনও তৈরি হয়নি।':'আপনার কার্ড এখনও তৈরি হয়নি। তৈরি হলে এখানে ডাউনলোড করতে পারবেন।')+'</p>')+
+          (ME.can.sa?'<div style="margin-top:14px"><button class="btn" id="cIssue" style="'+(issued?'':'background:var(--orange);border-color:var(--orange);color:var(--ink);font-weight:700')+'">'+(issued?'আবার তৈরি করুন':'আইডি কার্ড তৈরি')+'</button></div>'+(cardPanel?'<div style="margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:10px"><label style="display:flex;gap:8px;align-items:flex-start;min-height:44px"><input type="checkbox" id="cNew" style="margin-top:4px"> <span>নতুন QR দিয়ে তৈরি করুন। পুরনো কার্ডের QR তখন থেকে আর কাজ করবে না। (না চাপলে একই QR থাকবে।)</span></label><div style="margin-top:8px;display:flex;gap:10px"><button class="btn pri" id="cGo">নিশ্চিত করুন</button><button class="btn" id="cNo">বাতিল</button></div></div>':''):'')+'</div>';
       }
       if(ME.can.salary){
         h += '<div class="card"><h2>বেতনের ইতিহাস '+eyeBtn('hist',!!hist,hist?'বেতন লুকান':'বেতন দেখুন')+'</h2>'+
@@ -310,10 +326,29 @@ async function profile(id){
       on('xCancel',()=>{ exEdit=null; draw(); });
       on('xGo',async()=>{ try{ await api('extras.save',{id,extra_id:exEdit?exEdit.extra_id:'',label:$('x_l').value,value:$('x_v').value}); EX=await api('extras.list',{id}); exEdit=null; draw(); say('সংরক্ষণ হয়েছে।',true); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } });
       on('phDel',async()=>{ if(!confirm('ছবিটি সরিয়ে ফেলবেন?')) return; try{ await api('photo.remove',{id}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } });
+      if(cardRes) showCard();
+      const cl=$('cLang'); if(cl) cl.onchange=()=>{ cardLang=cl.value; showCard(); };
+      on('cPdf',()=>{ if(cardCanv) IDCARD.pdfSingle(cardCanv.front,cardCanv.back,id+'_'+cardLang+'.pdf'); });
+      on('cPf',()=>{ if(cardCanv) IDCARD.savePng(cardCanv.front,id+'_'+cardLang+'_front.png'); });
+      on('cPb',()=>{ if(cardCanv) IDCARD.savePng(cardCanv.back,id+'_'+cardLang+'_back.png'); });
+      on('cIssue',()=>{ if(r.card_issued_at){ cardPanel=true; draw(); } else issueCard(false); });
+      on('cNo',()=>{ cardPanel=false; draw(); });
+      on('cGo',()=>issueCard($('cNew').checked));
       const pi=$('phIn'); if(pi) pi.onchange=async()=>{ try{ say('ছবি পাঠানো হচ্ছে...',true); const d=await resize(pi.files[0],480); await api('photo.set',{id,dataUrl:d}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+    };
+    const showCard=async()=>{
+      const box=$('cardPv'); if(!box||!cardRes) return;
+      try{ cardCanv=await IDCARD.renderCard(cardRes.cards[0],cardRes.company,cardLang,'logo.png'); box.innerHTML=''; box.append(cardCanv.front,cardCanv.back); }catch(e){ box.textContent='কার্ড আঁকা যায়নি: '+e.message; }
+    };
+    const issueCard=async nq=>{
+      try{ const res=await api('cards.issue',{ids:[id],new_qr:nq}); const x=res[0];
+        if(!x.ok){ say(x.error); return; }
+        say('কার্ড তৈরি হয়েছে।'+(x.warnings.length?' সতর্কতা: '+x.warnings.join(', ')+'।':''),true);
+        setTimeout(()=>profile(id),900); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); }
     };
     const act=async(a,p)=>{ try{ await api(a,p); say('সংরক্ষণ হয়েছে।',true); setTimeout(()=>profile(id),600); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
     draw();
+    if(r.card_issued_at && (id===ME.employee_id || ME.can.sa)){ try{ cardRes=await api('cards.get',{ids:[id]}); showCard(); }catch(e){ const b=$('cardPv'); if(b) b.textContent=errText(e); } }
   }catch(e){ fail(e); }
 }
 const isAuthErr=e=>e.message==='NOT_LOGGED_IN'||String(e.message).startsWith('NOT_ALLOWED');
@@ -335,6 +370,47 @@ async function newEmployee(){
       '<button class="btn pri" id="nGo">সংরক্ষণ করুন</button>';
     $('nGo').onclick=async()=>{ try{ const fl=readF(keys); fl.designation_id=$('n_des').value; fl.monthly_salary=$('n_sal').value; if(ME.can.sa){ fl.login_email=$('n_mail').value; fl.login_role=$('n_role').value; }
       const r=await api('employees.create',{fields:fl}); location.hash='#/employee/'+encodeURIComponent(r.employee_id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+  }catch(e){ fail(e); }
+}
+
+async function cardsPage(){
+  const v=$('view');
+  v.innerHTML='<h1 class="t">আইডি কার্ড</h1><div class="sub">এক বা একাধিক ID নম্বর লিখে কার্ড তৈরি করুন এবং প্রিন্টের জন্য A4 PDF নামান।</div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+
+    '<div class="card"><div class="fld"><label for="c_ids">ID নম্বর</label><textarea id="c_ids" placeholder="যেমন: EMP-001, EMP-004   অথবা   EMP-001 থেকে EMP-006"></textarea></div>'+
+    '<label style="display:flex;gap:8px;align-items:flex-start;min-height:44px;margin-top:10px"><input type="checkbox" id="c_new" style="margin-top:4px"> <span>নতুন QR দিয়ে তৈরি করুন। পুরনো কার্ডের QR বাতিল হয়ে যাবে। (না চাপলে আগের QR-ই থাকবে।)</span></label>'+
+    '<div class="grid" style="margin-top:10px;max-width:360px"><div class="fld"><label for="c_lang">প্রিন্টের ভাষা</label>'+sel('c_lang',[{v:'bn',t:'বাংলা'},{v:'en',t:'English'}],'bn',false)+'</div></div>'+
+    '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="c_go">কার্ড তৈরি করুন ও প্রিন্ট PDF নামান</button><button class="btn" id="c_pdf">তৈরি না করে শুধু প্রিন্ট PDF নামান</button></div>'+
+    '<div class="muted" style="margin-top:12px">প্রিন্ট PDF-এ প্রতি পাতায় ৯টি কার্ড থাকে। প্রথমে সামনের পাতা, তারপর পেছনের পাতা (দুই পাশে প্রিন্টের জন্য আয়না-উল্টো সাজানো)। প্রিন্টারে "Long edge" দিয়ে দুই পাশে প্রিন্ট দিন।</div><div id="c_out" style="margin-top:14px"></div></div>';
+  const ids=()=>IDCARD.parseIds($('c_ids').value);
+  const sheet=async list=>{
+    const lang=$('c_lang').value, o=$('c_out');
+    const prog=document.createElement('p'); prog.className='muted'; prog.textContent='PDF তৈরি হচ্ছে...'; o.appendChild(prog);
+    const d=await api('cards.get',{ids:list}); const cards=[];
+    for(const c of d.cards){ cards.push(await IDCARD.renderCard(c,d.company,lang,'logo.png')); }
+    IDCARD.pdfSheet(cards,'royal_cards_'+lang+'.pdf'); prog.remove();
+    say(cards.length+'টি কার্ডের PDF নামানো হয়েছে।',true);
+  };
+  const guard=async fn=>{ try{ await fn(); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+  $('c_go').onclick=()=>guard(async()=>{
+    const list=ids(); if(!list.length){ say('সঠিক ID নম্বর লিখুন (যেমন EMP-001)।'); return; }
+    const nq=$('c_new').checked;
+    if(!confirm(list.length+'টি কার্ড তৈরি হবে'+(nq?' এবং এদের পুরনো QR বাতিল হবে':'')+'। এগোবেন?')) return;
+    const res=await api('cards.issue',{ids:list,new_qr:nq});
+    $('c_out').innerHTML='<table><thead><tr><th>ID</th><th>নাম</th><th>ফল</th></tr></thead><tbody>'+res.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.name||'')+'</td><td>'+(x.ok?'<span class="ok">তৈরি হয়েছে</span>'+(x.warnings.length?' <span class="muted">('+esc(x.warnings.join(', '))+')</span>':''):'<span class="err">'+esc(x.error)+'</span>')+'</td></tr>').join('')+'</tbody></table>';
+    const okIds=res.filter(x=>x.ok).map(x=>x.id);
+    if(okIds.length) await sheet(okIds); else say('কোনো কার্ড তৈরি হয়নি।');
+  });
+  $('c_pdf').onclick=()=>guard(async()=>{ const list=ids(); if(!list.length){ say('সঠিক ID নম্বর লিখুন (যেমন EMP-001)।'); return; } await sheet(list); });
+}
+
+async function companyPage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const c=await api('company.get');
+    const F=[['name_bn','কোম্পানির নাম (বাংলা)'],['name_en','কোম্পানির নাম (ইংরেজি)'],['phone_1','ফোন ১'],['phone_2','ফোন ২'],['address_bn','ঠিকানা (বাংলা)'],['address_en','ঠিকানা (ইংরেজি)']];
+    v.innerHTML='<h1 class="t">কোম্পানির তথ্য</h1><div class="sub">আইডি কার্ডের নাম, ফোন ও ঠিকানা এখান থেকে আসে। দোকান সরলে বা ফোন বদলালে এখানে বদলান, তারপর কার্ড আবার ডাউনলোড বা প্রিন্ট করুন।</div><div id="msg" role="alert" style="margin-bottom:12px"></div><div class="card"><div class="grid">'+
+      F.map(f=>'<div class="fld"><label for="co_'+f[0]+'">'+f[1]+'</label><input id="co_'+f[0]+'" type="text" value="'+esc(c[f[0]])+'"></div>').join('')+'</div><div style="margin-top:14px"><button class="btn pri" id="coGo">সংরক্ষণ করুন</button></div></div>';
+    $('coGo').onclick=async()=>{ try{ const o={}; F.forEach(f=>o[f[0]]=$('co_'+f[0]).value); await api('company.save',{fields:o}); say('সংরক্ষণ হয়েছে।',true); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
   }catch(e){ fail(e); }
 }
 
