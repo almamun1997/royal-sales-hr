@@ -41,6 +41,14 @@ td{padding:12px 8px;border-bottom:1px solid #EEF1F6}
 dl{display:grid;grid-template-columns:minmax(120px,200px) 1fr;gap:10px 16px;margin:0;font-size:14px}
 dt{color:var(--mute)}dd{margin:0;font-weight:600}
 .btn{min-height:44px;padding:0 18px;border:1px solid var(--blue);border-radius:10px;background:#fff;color:var(--blue);font-weight:600;font-size:14px;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center}
+.fld label{display:block;font-size:13px;color:var(--mute);margin-bottom:6px}
+.fld input,.fld select{width:100%;min-height:44px;padding:0 12px;border:1px solid #CBD3E1;border-radius:10px;background:#fff;font-family:inherit;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.btn.pri{background:var(--blue);color:#fff}
+.avatar{width:110px;height:110px;border-radius:50%;background:#E3E7F5;color:var(--blue);font-size:44px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden;margin:0 auto}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.ok{color:#0F6B3E}
+button.btn{cursor:pointer}
 .eye{min-width:44px;min-height:44px;border:0;background:transparent;color:var(--blue);border-radius:10px;cursor:pointer;vertical-align:middle;padding:0}.eye:hover{background:#EEF1F6}
 .muted{color:var(--mute);font-size:13px}.err{color:#9B1C1C}
 @media(max-width:700px){main{padding:18px 14px}nav{max-width:none}}
@@ -147,6 +155,7 @@ function route(){
   const h = location.hash || '#/employees';
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
+  if(h==='#/new'){ $('navEmp').classList.add('on'); newEmployee(); return; }
   if(h==='#/users'){ $('navUsers').classList.add('on'); usersPage(); return; }
   $('navEmp').classList.add('on');
   if(m) profile(decodeURIComponent(m[1])); else employees();
@@ -155,25 +164,57 @@ const FRI = g => (g==='TRN'||g==='CCTV') ? 'ছুটি (বিকাল ৩:�
 const BON = e => e==='Fixed' ? 'Fixed ৫০%' : e==='Discretionary' ? 'ইচ্ছামতো' : e==='None' ? 'নেই' : '—';
 const eyeBtn=(id,on,label)=>'<button class="eye" data-eye="'+esc(id)+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+label+'" title="'+label+'">'+(on?EYEOFF:EYE)+'</button>';
 
+let META=null;
+async function meta(){ if(!META) META=await api('meta.get'); return META; }
+const LBL={name_bn:'নাম (বাংলা)',name_en:'নাম (ইংরেজি)',mobile:'মোবাইল',address:'ঠিকানা',emergency_contact:'জরুরি যোগাযোগ',nid_number:'NID নম্বর',joining_date:'যোগদানের তারিখ',employment_type:'চাকরির ধরন',shift_group_id:'শিফট গ্রুপ',eid_bonus_mode:'ঈদ বোনাসের ধরন'};
+const BONL={Fixed:'Fixed ৫০%',Discretionary:'ইচ্ছামতো',None:'নেই'};
+const STL={Active:'সক্রিয়',Inactive:'নিষ্ক্রিয়',Resigned:'চাকরি ছেড়েছেন','Terminated':'বরখাস্ত','On Leave':'ছুটিতে'};
+const sel=(id,opts,cur,blank)=>'<select id="'+id+'">'+(blank?'<option value="">— বাছাই করুন —</option>':'')+opts.map(o=>'<option value="'+esc(o.v)+'"'+(String(o.v)===String(cur)?' selected':'')+'>'+esc(o.t)+'</option>').join('')+'</select>';
+function fld(k,val,m){
+  const id='f_'+k; let c;
+  if(k==='joining_date') c='<input id="'+id+'" type="date" value="'+esc(val)+'">';
+  else if(k==='employment_type') c=sel(id,m.emp_types.map(x=>({v:x,t:x})),val,true);
+  else if(k==='shift_group_id') c=sel(id,m.shifts.map(x=>({v:x.id,t:x.name})),val,false);
+  else if(k==='eid_bonus_mode') c=sel(id,m.eid_modes.map(x=>({v:x,t:BONL[x]})),val,false);
+  else if(k==='mobile'||k==='emergency_contact') c='<input id="'+id+'" type="tel" inputmode="numeric" value="'+esc(val)+'">';
+  else if(k==='nid_number') c='<input id="'+id+'" type="text" inputmode="numeric" value="'+esc(val)+'">';
+  else c='<input id="'+id+'" type="text" value="'+esc(val)+'">';
+  return '<div class="fld"><label for="'+id+'">'+LBL[k]+'</label>'+c+'</div>';
+}
+const readF=keys=>{ const o={}; keys.forEach(k=>o[k]=$('f_'+k).value); return o; };
+const say=(t,ok)=>{ const m=$('msg'); if(m){ m.textContent=t; m.className=ok?'ok':'err'; } };
+
+function resize(file,max){ return new Promise((res,rej)=>{ const img=new Image(), url=URL.createObjectURL(file);
+  img.onload=()=>{ const s=Math.min(1,max/Math.max(img.width,img.height)), c=document.createElement('canvas');
+    c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',0.82)); };
+  img.onerror=()=>rej(new Error('ছবি পড়া যায়নি')); img.src=url; }); }
+
 async function employees(){
   const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
   try{
     const rows = await api('employees.list');
     const sal = ME.can.salary;
-    let SAL=null, shown=new Set();
+    let SAL=null, shown=new Set(), filt='active';
+    const vis=()=>rows.filter(r=>filt==='all'||(filt==='active'?(r.status==='Active'||r.status==='On Leave'):(r.status!=='Active'&&r.status!=='On Leave')));
     const salCell=r=>{ const on=shown.has(r.employee_id); return '<span>'+(on&&SAL?bn(SAL[r.employee_id]):MASK)+'</span> '+eyeBtn(r.employee_id,on,on?'বেতন লুকান':'বেতন দেখুন'); };
     const draw=()=>{
-      const allOn = rows.length>0 && rows.every(r=>shown.has(r.employee_id));
-      v.innerHTML = '<h1 class="t">কর্মচারী</h1><div class="sub">মোট '+rows.length+' জন</div><div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>নাম</th><th>পদ</th><th>অবস্থা</th><th>শুক্রবার সকাল</th>'+(sal?'<th style="text-align:right">মাসিক বেতন <button class="btn" style="min-height:36px;padding:0 10px;font-size:13px;margin-left:6px" id="allEye">'+(allOn?'সব লুকান':'সব দেখান')+'</button></th>':'')+'<th>ঈদ বোনাস</th></tr></thead><tbody>'+
-        rows.map(r=>'<tr><td class="muted">'+esc(r.employee_id)+'</td><td><a href="#/employee/'+encodeURIComponent(r.employee_id)+'" style="font-weight:700;text-decoration:none">'+esc(r.name_bn)+'</a></td><td>'+esc(r.designation)+'</td><td><span class="chip">'+esc(r.status)+'</span></td><td class="muted">'+FRI(r.shift_group_id)+'</td>'+(sal?'<td style="text-align:right;font-weight:600;white-space:nowrap">'+salCell(r)+'</td>':'')+'<td class="muted">'+BON(r.eid_bonus_mode)+'</td></tr>').join('')+
+      const list=vis(), allOn = list.length>0 && list.every(r=>shown.has(r.employee_id));
+      v.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center"><div><h1 class="t">কর্মচারী</h1><div class="sub">দেখানো হচ্ছে '+list.length+' জন</div></div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+        (ME.can.all?'<label class="muted" for="flt">দেখান</label><select id="flt" style="min-height:44px"><option value="active"'+(filt==='active'?' selected':'')+'>বর্তমান কর্মচারী</option><option value="left"'+(filt==='left'?' selected':'')+'>সাবেক</option><option value="all"'+(filt==='all'?' selected':'')+'>সবাই</option></select>':'')+
+        (ME.can.manage?'<a class="btn" style="background:var(--orange);border-color:var(--orange);color:var(--ink);font-weight:700" href="#/new">নতুন কর্মচারী</a>':'')+'</div></div>'+
+        '<div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>নাম</th><th>পদ</th><th>অবস্থা</th><th>শুক্রবার সকাল</th>'+(sal?'<th style="text-align:right">মাসিক বেতন <button class="btn" style="min-height:36px;padding:0 10px;font-size:13px;margin-left:6px" id="allEye">'+(allOn?'সব লুকান':'সব দেখান')+'</button></th>':'')+'<th>ঈদ বোনাস</th></tr></thead><tbody>'+
+        list.map(r=>'<tr><td class="muted">'+esc(r.employee_id)+'</td><td><a href="#/employee/'+encodeURIComponent(r.employee_id)+'" style="font-weight:700;text-decoration:none">'+esc(r.name_bn)+'</a></td><td>'+esc(r.designation)+'</td><td><span class="chip'+(r.status==='Active'?'':' o')+'">'+esc(STL[r.status]||r.status)+'</span></td><td class="muted">'+FRI(r.shift_group_id)+'</td>'+(sal?'<td style="text-align:right;font-weight:600;white-space:nowrap">'+salCell(r)+'</td>':'')+'<td class="muted">'+BON(r.eid_bonus_mode)+'</td></tr>').join('')+
         '</tbody></table></div>'+(sal?'<div class="muted" style="margin-top:12px">বেতন ডিফল্টভাবে লুকানো থাকে। চোখের আইকনে চাপলে দেখা যায়, আবার চাপলে লুকায়। ১ মিনিট পর নিজে লুকিয়ে যায়।</div>':'')+'</div>';
       v.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>toggle(b.dataset.eye));
       const ae=$('allEye'); if(ae) ae.onclick=()=>toggle(null);
+      const fl=$('flt'); if(fl) fl.onchange=()=>{ filt=fl.value; draw(); };
     };
     const toggle=async id=>{
       try{
         if(!SAL) SAL = await api('salary.get');
-        if(id===null){ const allOn=rows.every(r=>shown.has(r.employee_id)); rows.forEach(r=>allOn?shown.delete(r.employee_id):shown.add(r.employee_id)); }
+        const list=vis();
+        if(id===null){ const allOn=list.every(r=>shown.has(r.employee_id)); list.forEach(r=>allOn?shown.delete(r.employee_id):shown.add(r.employee_id)); }
         else if(shown.has(id)) shown.delete(id); else shown.add(id);
         draw(); autoHide(()=>{ shown.clear(); SAL=null; draw(); });
       }catch(e){ fail(e); }
@@ -185,22 +226,70 @@ async function employees(){
 async function profile(id){
   const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
   try{
-    const r = await api('employees.get',{id});
+    const [r,m] = await Promise.all([api('employees.get',{id}), meta()]);
+    const photo = r.has_photo ? api('photo.get',{id}).catch(()=>null) : Promise.resolve(null);
+    const canPhoto = ME.can.manage || id===ME.employee_id;
+    let hist=null, mode='view', panel='';
     const f=(k,val)=>'<dt>'+k+'</dt><dd>'+(val?esc(val):'<span class="muted">এখনও দেওয়া হয়নি</span>')+'</dd>';
-    let hist=null;
+    const today=new Date().toISOString().slice(0,10);
     const draw=()=>{
-      let h = '<p><a href="#/employees" class="btn">← কর্মচারী তালিকা</a></p><h1 class="t">'+esc(r.name_bn)+'</h1><div class="sub">'+esc(r.name_en)+' · '+esc(r.employee_id)+'</div>'+
-        '<div class="card"><h2>সাধারণ তথ্য</h2><dl>'+f('পদ',r.designation)+f('অবস্থা',r.status)+f('যোগদানের তারিখ',r.joining_date)+f('চাকরির ধরন',r.employment_type)+f('মোবাইল',r.mobile)+f('ঠিকানা',r.address)+f('জরুরি যোগাযোগ',r.emergency_contact)+f('শুক্রবার সকাল',FRI(r.shift_group_id))+f('ঈদ বোনাস',BON(r.eid_bonus_mode))+(r.nid_number!==undefined?f('NID',r.nid_number):'')+'</dl></div>';
+      let h = '<p><a href="#/employees" class="btn">← কর্মচারী তালিকা</a></p>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:20px"><div style="text-align:center"><div id="ph" class="avatar">'+esc((r.name_en||r.name_bn||'?').trim().charAt(0))+'</div>'+
+        (canPhoto?'<label class="btn" style="margin-top:8px;min-height:36px;font-size:13px;cursor:pointer">ছবি বদলান<input id="phIn" type="file" accept="image/*" hidden></label>':'')+'</div>'+
+        '<div><h1 class="t">'+esc(r.name_bn)+'</h1><div class="sub" style="margin:0">'+esc(r.name_en)+' · '+esc(r.employee_id)+' · <span class="chip'+(r.status==='Active'?'':' o')+'">'+esc(STL[r.status]||r.status)+'</span></div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">'+
+        (r.editable.length?'<button class="btn" id="bEdit">তথ্য সম্পাদনা</button>':'')+
+        (ME.can.manage?'<button class="btn" id="bDes">পদবী বদল</button><button class="btn" id="bSal">বেতন বদল</button>'+(id!==ME.employee_id?'<button class="btn" id="bSt">অবস্থা বদল</button>':''):'')+
+        '</div></div></div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+(panel?'<div class="card">'+panel+'</div>':'');
+      if(mode==='edit'){
+        h += '<div class="card"><h2>তথ্য সম্পাদনা</h2><div class="grid">'+r.editable.map(k=>fld(k,k==='nid_number'?r.nid_number:r[k],m)).join('')+'</div><div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="bSave">সংরক্ষণ করুন</button><button class="btn" id="bCancel">বাতিল</button></div></div>';
+      } else {
+        h += '<div class="card"><h2>সাধারণ তথ্য</h2><dl>'+f('পদ',r.designation)+f('যোগদানের তারিখ',r.joining_date)+f('চাকরির ধরন',r.employment_type)+f('মোবাইল',r.mobile)+f('ঠিকানা',r.address)+f('জরুরি যোগাযোগ',r.emergency_contact)+f('শুক্রবার সকাল',FRI(r.shift_group_id))+f('ঈদ বোনাস',BON(r.eid_bonus_mode))+(r.last_working_date?f('শেষ কাজের তারিখ',r.last_working_date):'')+(r.nid_number!==undefined?f('NID',r.nid_number):'')+'</dl></div>';
+      }
       if(ME.can.salary){
         h += '<div class="card"><h2>বেতনের ইতিহাস '+eyeBtn('hist',!!hist,hist?'বেতন লুকান':'বেতন দেখুন')+'</h2>'+
           (hist?'<div class="tw"><table><thead><tr><th>কার্যকর তারিখ</th><th style="text-align:right">মাসিক বেতন</th><th>কারণ</th></tr></thead><tbody>'+hist.map(s=>'<tr><td>'+(s.effective_from?esc(s.effective_from):'<span class="muted">তারিখ বসাতে হবে</span>')+'</td><td style="text-align:right;font-weight:600">'+bn(s.monthly_salary)+'</td><td class="muted">'+esc(s.reason)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">বেতন লুকানো আছে। চোখের আইকনে চাপুন।</p>')+'</div>';
       }
       v.innerHTML=h;
-      const b=v.querySelector('[data-eye]'); if(b) b.onclick=async()=>{
+      photo.then(p=>{ const el=$('ph'); if(p&&el){ el.innerHTML='<img src="'+p+'" alt="">'; } });
+      const on=(i,fn)=>{ const e=$(i); if(e) e.onclick=fn; };
+      on('bEdit',()=>{ mode='edit'; panel=''; draw(); });
+      on('bCancel',()=>{ mode='view'; draw(); });
+      on('bSave',async()=>{ try{ const x=await api('employees.update',{id,fields:readF(r.editable)}); say(x.changed?'সংরক্ষণ হয়েছে।':'কোনো পরিবর্তন নেই।',true); if(x.changed) setTimeout(()=>profile(id),600); else {mode='view';draw();} }catch(e){ if(!isAuthErr(e)) say(errText(e)); else fail(e);} });
+      on('bDes',()=>{ mode='view'; panel='<h2>পদবী বদল</h2><div class="grid">'+'<div class="fld"><label for="p_des">নতুন পদবী</label>'+sel('p_des',m.designations.map(d=>({v:d.id,t:d.name_bn})),r.designation_id,false)+'</div><div class="fld"><label for="p_eff">কার্যকর তারিখ</label><input id="p_eff" type="date" value="'+today+'"></div><div class="fld"><label for="p_why">কারণ (যেমন: পদোন্নতি)</label><input id="p_why" type="text"></div></div><div style="margin-top:14px"><button class="btn pri" id="pGo">সংরক্ষণ করুন</button></div>'; draw();
+        on('pGo',()=>act('employees.changeDesignation',{id,designation_id:$('p_des').value,effective_from:$('p_eff').value,reason:$('p_why').value})); });
+      on('bSal',()=>{ mode='view'; panel='<h2>বেতন বদল</h2><p class="muted">পুরনো বেতন মুছবে না, ইতিহাসে থেকে যাবে।</p><div class="grid"><div class="fld"><label for="p_sal">নতুন মাসিক বেতন (টাকা)</label><input id="p_sal" type="number" min="1" inputmode="numeric"></div><div class="fld"><label for="p_eff">কার্যকর তারিখ</label><input id="p_eff" type="date" value="'+today+'"></div><div class="fld"><label for="p_why">কারণ</label><input id="p_why" type="text"></div></div><div style="margin-top:14px"><button class="btn pri" id="pGo">সংরক্ষণ করুন</button></div>'; draw();
+        on('pGo',()=>act('employees.changeSalary',{id,monthly_salary:$('p_sal').value,effective_from:$('p_eff').value,reason:$('p_why').value})); });
+      on('bSt',()=>{ mode='view'; panel='<h2>অবস্থা বদল</h2><p class="muted">চাকরি ছাড়া, বরখাস্ত বা নিষ্ক্রিয় করলে এই কর্মচারীর লগইন সঙ্গে সঙ্গে বন্ধ হয়ে যাবে। কোনো তথ্য মোছা হয় না।</p><div class="grid"><div class="fld"><label for="p_st">নতুন অবস্থা</label>'+sel('p_st',m.statuses.map(s=>({v:s,t:STL[s]})),r.status,false)+'</div><div class="fld"><label for="p_eff">শেষ কাজের তারিখ (চাকরি ছাড়লে বা বরখাস্ত হলে)</label><input id="p_eff" type="date" value="'+today+'"></div></div><div style="margin-top:14px"><button class="btn pri" id="pGo">সংরক্ষণ করুন</button></div>'; draw();
+        on('pGo',()=>{ const s=$('p_st').value; if(['Inactive','Resigned','Terminated'].includes(s)&&!confirm('এই কর্মচারীর লগইন বন্ধ হয়ে যাবে। নিশ্চিত?')) return; act('employees.setStatus',{id,status:s,last_working_date:$('p_eff').value}); }); });
+      const eb=v.querySelector('[data-eye]'); if(eb) eb.onclick=async()=>{
         try{ if(hist) hist=null; else { hist=await api('salary.get',{id}); autoHide(()=>{hist=null;draw();}); } draw(); }catch(e){ fail(e); }
       };
+      const pi=$('phIn'); if(pi) pi.onchange=async()=>{ try{ say('ছবি পাঠানো হচ্ছে...',true); const d=await resize(pi.files[0],480); await api('photo.set',{id,dataUrl:d}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
     };
+    const act=async(a,p)=>{ try{ await api(a,p); say('সংরক্ষণ হয়েছে।',true); setTimeout(()=>profile(id),600); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
     draw();
+  }catch(e){ fail(e); }
+}
+const isAuthErr=e=>e.message==='NOT_LOGGED_IN'||String(e.message).startsWith('NOT_ALLOWED');
+const errText=e=>e.message==='NOT_PERMITTED'?'এই কাজের অনুমতি আপনার নেই।':e.message;
+
+async function newEmployee(){
+  const v=$('view');
+  if(!ME.can.manage){ v.innerHTML='<p class="err">এই কাজের অনুমতি আপনার নেই।</p>'; return; }
+  v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const m=await meta();
+    const keys=['name_bn','name_en','joining_date','employment_type','shift_group_id','eid_bonus_mode','mobile','address','emergency_contact'];
+    v.innerHTML='<p><a href="#/employees" class="btn">← কর্মচারী তালিকা</a></p><h1 class="t">নতুন কর্মচারী</h1><div class="sub">ID নিজে তৈরি হবে। সংরক্ষণের পর প্রোফাইলে গিয়ে ছবি দিতে পারবেন।</div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+
+      '<div class="card"><div class="grid">'+fld('name_bn','',m)+fld('name_en','',m)+
+      '<div class="fld"><label for="n_des">পদবী</label>'+sel('n_des',m.designations.map(d=>({v:d.id,t:d.name_bn})),'',true)+'</div>'+
+      '<div class="fld"><label for="n_sal">মাসিক বেতন (টাকা)</label><input id="n_sal" type="number" min="1" inputmode="numeric"></div>'+
+      keys.slice(2).map(k=>fld(k,k==='eid_bonus_mode'?'Fixed':'',m)).join('')+'</div></div>'+
+      '<div class="card"><h2>লগইন (ঐচ্ছিক)</h2><p class="muted">Gmail দিলে তিনি সিস্টেমে ঢুকতে পারবেন। পরেও যোগ করা যাবে।</p><div class="grid"><div class="fld"><label for="n_mail">Gmail ঠিকানা</label><input id="n_mail" type="email"></div><div class="fld"><label for="n_role">ভূমিকা</label>'+sel('n_role',m.roles.map(x=>({v:x,t:ROLE[x]||x})),'Staff',false)+'</div></div></div>'+
+      '<button class="btn pri" id="nGo">সংরক্ষণ করুন</button>';
+    $('nGo').onclick=async()=>{ try{ const fl=readF(keys); fl.designation_id=$('n_des').value; fl.monthly_salary=$('n_sal').value; fl.login_email=$('n_mail').value; fl.login_role=$('n_role').value;
+      const r=await api('employees.create',{fields:fl}); location.hash='#/employee/'+encodeURIComponent(r.employee_id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
   }catch(e){ fail(e); }
 }
 
