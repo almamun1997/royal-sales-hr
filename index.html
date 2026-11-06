@@ -48,7 +48,22 @@ dt{color:var(--mute)}dd{margin:0;font-weight:600}
 .avatar{width:110px;height:110px;border-radius:50%;background:#E3E7F5;color:var(--blue);font-size:44px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden;margin:0 auto}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .ok{color:#0F6B3E}
-button.btn{cursor:pointer}
+button,select,summary,label[for],a,.btn,input[type=file]{cursor:pointer}
+button:disabled{cursor:not-allowed}
+nav a,.btn,button,.card,tbody tr,.fld input,.fld select{transition:background-color .18s ease,color .18s ease,box-shadow .2s ease,transform .15s ease,border-color .18s ease}
+nav a:not(.on):not(.soon):hover{background:rgba(255,255,255,.1);color:#fff;transform:translateX(3px)}
+nav a.on{box-shadow:0 2px 10px rgba(241,90,41,.35)}
+.me button:hover{background:rgba(255,255,255,.14)}
+.btn:hover{box-shadow:0 2px 10px rgba(40,56,145,.2);transform:translateY(-1px)}
+.btn:active,.eye:active,.me button:active{transform:translateY(0) scale(.97)}
+.btn.pri:hover{background:#1f2d78}
+.card:hover{box-shadow:0 4px 18px rgba(15,31,77,.08)}
+tbody tr:hover{background:#F7F9FD}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(40,56,145,.15)}
+.eye svg{transition:transform .15s ease}.eye:hover svg{transform:scale(1.15)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+#view.enter{animation:fadeUp .3s ease}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .eye{min-width:44px;min-height:44px;border:0;background:transparent;color:var(--blue);border-radius:10px;cursor:pointer;vertical-align:middle;padding:0}.eye:hover{background:#EEF1F6}
 .muted{color:var(--mute);font-size:13px}.err{color:#9B1C1C}
 @media(max-width:700px){main{padding:18px 14px}nav{max-width:none}}
@@ -70,6 +85,7 @@ button.btn{cursor:pointer}
     <a class="soon" href="#">ছুটি</a><a class="soon" href="#">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
     <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
+    <a id="navDes" class="hide" href="#/designations">পদবী</a>
     <div class="me"><div id="meName"></div><div id="meRole"></div><button id="logout">লগআউট</button></div>
   </nav>
   <main id="view" aria-live="polite"></main>
@@ -114,7 +130,8 @@ async function start(){
     ME = await api('me');
     $('meName').textContent = ME.name || ME.email;
     $('meRole').textContent = ROLE[ME.role] || ME.role;
-    $('navUsers').classList.toggle('hide', ME.role!=='Super Admin');
+    $('navUsers').classList.toggle('hide', !ME.can.sa);
+    $('navDes').classList.toggle('hide', !ME.can.sa);
     $('login').classList.add('hide'); $('app').classList.remove('hide');
     route();
   }catch(e){
@@ -155,6 +172,8 @@ function route(){
   const h = location.hash || '#/employees';
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
+  const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
+  if(h==='#/designations'){ $('navDes').classList.add('on'); designationsPage(); return; }
   if(h==='#/new'){ $('navEmp').classList.add('on'); newEmployee(); return; }
   if(h==='#/users'){ $('navUsers').classList.add('on'); usersPage(); return; }
   $('navEmp').classList.add('on');
@@ -228,18 +247,18 @@ async function profile(id){
   try{
     const [r,m] = await Promise.all([api('employees.get',{id}), meta()]);
     const photo = r.has_photo ? api('photo.get',{id}).catch(()=>null) : Promise.resolve(null);
-    const canPhoto = ME.can.manage || id===ME.employee_id;
+    const canPhoto = ME.can.editOthers || id===ME.employee_id;
     let hist=null, mode='view', panel='';
     const f=(k,val)=>'<dt>'+k+'</dt><dd>'+(val?esc(val):'<span class="muted">এখনও দেওয়া হয়নি</span>')+'</dd>';
     const today=new Date().toISOString().slice(0,10);
     const draw=()=>{
       let h = '<p><a href="#/employees" class="btn">← কর্মচারী তালিকা</a></p>'+
         '<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:20px"><div style="text-align:center"><div id="ph" class="avatar">'+esc((r.name_en||r.name_bn||'?').trim().charAt(0))+'</div>'+
-        (canPhoto?'<label class="btn" style="margin-top:8px;min-height:36px;font-size:13px;cursor:pointer">ছবি বদলান<input id="phIn" type="file" accept="image/*" hidden></label>':'')+'</div>'+
+        (canPhoto?'<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px"><label class="btn" style="min-height:36px;font-size:13px">'+(r.has_photo?'ছবি বদলান':'ছবি দিন')+'<input id="phIn" type="file" accept="image/*" hidden></label>'+(r.has_photo?'<button class="btn" id="phDel" style="min-height:36px;font-size:13px;border-color:#9B1C1C;color:#9B1C1C">ছবি সরান</button>':'')+'</div>':'')+'</div>'+
         '<div><h1 class="t">'+esc(r.name_bn)+'</h1><div class="sub" style="margin:0">'+esc(r.name_en)+' · '+esc(r.employee_id)+' · <span class="chip'+(r.status==='Active'?'':' o')+'">'+esc(STL[r.status]||r.status)+'</span></div>'+
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">'+
         (r.editable.length?'<button class="btn" id="bEdit">তথ্য সম্পাদনা</button>':'')+
-        (ME.can.manage?'<button class="btn" id="bDes">পদবী বদল</button><button class="btn" id="bSal">বেতন বদল</button>'+(id!==ME.employee_id?'<button class="btn" id="bSt">অবস্থা বদল</button>':''):'')+
+        (ME.can.manage?'<button class="btn" id="bDes">পদবী বদল</button>'+(id!==ME.employee_id?'<button class="btn" id="bSt">অবস্থা বদল</button>':''):'')+(ME.can.salaryEdit?'<button class="btn" id="bSal">বেতন বদল</button>':'')+
         '</div></div></div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+(panel?'<div class="card">'+panel+'</div>':'');
       if(mode==='edit'){
         h += '<div class="card"><h2>তথ্য সম্পাদনা</h2><div class="grid">'+r.editable.map(k=>fld(k,k==='nid_number'?r.nid_number:r[k],m)).join('')+'</div><div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="bSave">সংরক্ষণ করুন</button><button class="btn" id="bCancel">বাতিল</button></div></div>';
@@ -265,6 +284,7 @@ async function profile(id){
       const eb=v.querySelector('[data-eye]'); if(eb) eb.onclick=async()=>{
         try{ if(hist) hist=null; else { hist=await api('salary.get',{id}); autoHide(()=>{hist=null;draw();}); } draw(); }catch(e){ fail(e); }
       };
+      on('phDel',async()=>{ if(!confirm('ছবিটি সরিয়ে ফেলবেন?')) return; try{ await api('photo.remove',{id}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } });
       const pi=$('phIn'); if(pi) pi.onchange=async()=>{ try{ say('ছবি পাঠানো হচ্ছে...',true); const d=await resize(pi.files[0],480); await api('photo.set',{id,dataUrl:d}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
     };
     const act=async(a,p)=>{ try{ await api(a,p); say('সংরক্ষণ হয়েছে।',true); setTimeout(()=>profile(id),600); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
@@ -286,10 +306,30 @@ async function newEmployee(){
       '<div class="fld"><label for="n_des">পদবী</label>'+sel('n_des',m.designations.map(d=>({v:d.id,t:d.name_bn})),'',true)+'</div>'+
       '<div class="fld"><label for="n_sal">মাসিক বেতন (টাকা)</label><input id="n_sal" type="number" min="1" inputmode="numeric"></div>'+
       keys.slice(2).map(k=>fld(k,k==='eid_bonus_mode'?'Fixed':'',m)).join('')+'</div></div>'+
-      '<div class="card"><h2>লগইন (ঐচ্ছিক)</h2><p class="muted">Gmail দিলে তিনি সিস্টেমে ঢুকতে পারবেন। পরেও যোগ করা যাবে।</p><div class="grid"><div class="fld"><label for="n_mail">Gmail ঠিকানা</label><input id="n_mail" type="email"></div><div class="fld"><label for="n_role">ভূমিকা</label>'+sel('n_role',m.roles.map(x=>({v:x,t:ROLE[x]||x})),'Staff',false)+'</div></div></div>'+
+      (ME.can.sa?'<div class="card"><h2>লগইন (ঐচ্ছিক)</h2><p class="muted">Gmail দিলে তিনি সিস্টেমে ঢুকতে পারবেন। পরেও যোগ করা যাবে।</p><div class="grid"><div class="fld"><label for="n_mail">Gmail ঠিকানা</label><input id="n_mail" type="email"></div><div class="fld"><label for="n_role">ভূমিকা</label>'+sel('n_role',m.roles.map(x=>({v:x,t:ROLE[x]||x})),'Staff',false)+'</div></div></div>':'')+
       '<button class="btn pri" id="nGo">সংরক্ষণ করুন</button>';
-    $('nGo').onclick=async()=>{ try{ const fl=readF(keys); fl.designation_id=$('n_des').value; fl.monthly_salary=$('n_sal').value; fl.login_email=$('n_mail').value; fl.login_role=$('n_role').value;
+    $('nGo').onclick=async()=>{ try{ const fl=readF(keys); fl.designation_id=$('n_des').value; fl.monthly_salary=$('n_sal').value; if(ME.can.sa){ fl.login_email=$('n_mail').value; fl.login_role=$('n_role').value; }
       const r=await api('employees.create',{fields:fl}); location.hash='#/employee/'+encodeURIComponent(r.employee_id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+  }catch(e){ fail(e); }
+}
+
+async function designationsPage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const rows=await api('designations.list');
+    let editing=null;
+    const draw=()=>{
+      const e=editing;
+      v.innerHTML='<h1 class="t">পদবী</h1><div class="sub">নতুন পদবী যোগ করুন বা নাম বদলান। যে পদবীতে কর্মচারী আছেন তা বন্ধ করা যাবে না।</div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+
+        '<div class="card"><div class="tw"><table><thead><tr><th>বাংলা নাম</th><th>ইংরেজি নাম</th><th>কর্মচারী</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
+        rows.map(d=>'<tr><td style="font-weight:600">'+esc(d.name_bn)+'</td><td>'+esc(d.name_en)+'</td><td>'+d.in_use+' জন</td><td><span class="chip'+(d.is_active?'':' o')+'">'+(d.is_active?'চালু':'বন্ধ')+'</span></td><td><button class="btn" data-ed="'+esc(d.id)+'">সম্পাদনা</button></td></tr>').join('')+'</tbody></table></div></div>'+
+        '<div class="card"><h2>'+(e?'পদবী সম্পাদনা':'নতুন পদবী')+'</h2><div class="grid"><div class="fld"><label for="d_bn">বাংলা নাম</label><input id="d_bn" type="text" value="'+esc(e?e.name_bn:'')+'"></div><div class="fld"><label for="d_en">ইংরেজি নাম</label><input id="d_en" type="text" value="'+esc(e?e.name_en:'')+'"></div>'+
+        (e?'<div class="fld"><label for="d_ac">অবস্থা</label>'+sel('d_ac',[{v:'true',t:'চালু'},{v:'false',t:'বন্ধ'}],String(e.is_active),false)+'</div>':'')+'</div><div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="dGo">সংরক্ষণ করুন</button>'+(e?'<button class="btn" id="dCancel">বাতিল</button>':'')+'</div></div>';
+      v.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{ editing=rows.find(x=>x.id===b.dataset.ed); draw(); window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); });
+      const c=$('dCancel'); if(c) c.onclick=()=>{ editing=null; draw(); };
+      $('dGo').onclick=async()=>{ try{ await api('designations.save',{id:e?e.id:'',name_bn:$('d_bn').value,name_en:$('d_en').value,is_active:e?$('d_ac').value==='true':true}); META=null; designationsPage(); }catch(er){ if(isAuthErr(er)) fail(er); else say(errText(er)); } };
+    };
+    draw();
   }catch(e){ fail(e); }
 }
 
@@ -298,11 +338,23 @@ async function usersPage(){
   try{
     const rows = await api('users.list');
     v.innerHTML='<h1 class="t">ব্যবহারকারী</h1><div class="sub">কাউকে জোর করে লগআউট করালে তিনি পরের অনুরোধেই বেরিয়ে যাবেন এবং আবার Google দিয়ে ঢুকতে হবে।</div><div class="card"><div class="tw"><table><thead><tr><th>নাম</th><th>ইমেইল</th><th>ভূমিকা</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
-      rows.map(u=>'<tr><td style="font-weight:600">'+(u.name?esc(u.name):'<span class="muted">—</span>')+'</td><td>'+esc(u.email)+'</td><td>'+esc(ROLE[u.role]||u.role)+'</td><td><span class="chip'+(u.is_active?'':' o')+'">'+(u.is_active?'Active':'বন্ধ')+'</span></td><td><button class="btn" data-lo="'+esc(u.user_id)+'">লগআউট করান</button></td></tr>').join('')+
-      '</tbody></table></div><div style="margin-top:16px"><button class="btn" id="loAll">সবাইকে লগআউট করান (আমি ছাড়া)</button></div><div id="loMsg" class="muted" style="margin-top:12px" role="status"></div></div>';
+      rows.map(u=>'<tr><td style="font-weight:600">'+(u.name?esc(u.name):'<span class="muted">—</span>')+'</td><td>'+esc(u.email)+'</td><td>'+esc(ROLE[u.role]||u.role)+'</td><td><span class="chip'+(u.is_active?'':' o')+'">'+(u.is_active?'Active':'বন্ধ')+'</span></td><td style="white-space:nowrap">'+(u.role==='Admin'?'<button class="btn" data-pm="'+esc(u.user_id)+'" data-pn="'+esc(u.name||u.email)+'">অনুমতি</button> ':'')+'<button class="btn" data-lo="'+esc(u.user_id)+'">লগআউট করান</button></td></tr>').join('')+
+      '</tbody></table></div><div style="margin-top:16px"><button class="btn" id="loAll">সবাইকে লগআউট করান (আমি ছাড়া)</button></div><div id="loMsg" class="muted" style="margin-top:12px" role="status"></div></div><div id="pmBox"></div>';
     const run=async(p,q)=>{ if(!confirm(q)) return; try{ const r=await api('users.forceLogout',p); $('loMsg').textContent=r.logged_out+' জনকে লগআউট করানো হয়েছে।'; }catch(e){ fail(e); } };
     v.querySelectorAll('[data-lo]').forEach(b=>b.onclick=()=>run({user_id:b.dataset.lo},'এই ব্যবহারকারীকে লগআউট করাবেন?'));
     $('loAll').onclick=()=>run({all:true},'আপনি ছাড়া সবাইকে লগআউট করাবেন?');
+    v.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{
+      try{
+        const uid=b.dataset.pm, d=await api('permissions.get',{user_id:uid}), box=$('pmBox');
+        box.innerHTML='<div class="card"><h2>অনুমতি: '+esc(b.dataset.pn)+' (অ্যাডমিন)</h2><p class="muted">এখানে যা টিক দেবেন, শুধু সেটুকুই এই অ্যাডমিন করতে পারবেন। সব কাজ সার্ভারে যাচাই হয়।</p><div id="pmMsg" role="alert"></div><div class="tw"><table><thead><tr><th>অংশ</th><th>দেখা</th><th>বদলানো</th></tr></thead><tbody>'+
+          d.modules.map(m=>{ const val=d.values[m.key]||{}; return '<tr><td style="font-weight:600">'+esc(m.label)+'</td><td>'+(m.view?'<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" data-k="'+m.key+'" data-a="view"'+(val.view?' checked':'')+'> '+esc(m.view)+'</label>':'<span class="muted">—</span>')+'</td><td>'+(m.edit?'<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" data-k="'+m.key+'" data-a="edit"'+(val.edit?' checked':'')+'> '+esc(m.edit)+'</label>':'<span class="muted">—</span>')+'</td></tr>'; }).join('')+
+          '</tbody></table></div><div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="pmSave">সংরক্ষণ করুন</button><button class="btn" id="pmClose">বন্ধ করুন</button></div></div>';
+        box.scrollIntoView({behavior:'smooth'});
+        $('pmClose').onclick=()=>{ box.innerHTML=''; };
+        $('pmSave').onclick=async()=>{ const vals={}; box.querySelectorAll('input[type=checkbox]').forEach(c=>{ (vals[c.dataset.k]=vals[c.dataset.k]||{})[c.dataset.a]=c.checked; });
+          try{ await api('permissions.set',{user_id:uid,values:vals}); $('pmMsg').textContent='সংরক্ষণ হয়েছে। অ্যাডমিন পরের অনুরোধ থেকেই নতুন অনুমতি পাবেন।'; $('pmMsg').className='ok'; }catch(e){ if(isAuthErr(e)) fail(e); else { $('pmMsg').textContent=errText(e); $('pmMsg').className='err'; } } };
+      }catch(e){ if(isAuthErr(e)) fail(e); else $('loMsg').textContent=errText(e); }
+    });
   }catch(e){ fail(e); }
 }
 function fail(e){
