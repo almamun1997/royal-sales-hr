@@ -41,6 +41,7 @@ td{padding:12px 8px;border-bottom:1px solid #EEF1F6}
 dl{display:grid;grid-template-columns:minmax(120px,200px) 1fr;gap:10px 16px;margin:0;font-size:14px}
 dt{color:var(--mute)}dd{margin:0;font-weight:600}
 .btn{min-height:44px;padding:0 18px;border:1px solid var(--blue);border-radius:10px;background:#fff;color:var(--blue);font-weight:600;font-size:14px;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center}
+.eye{min-width:44px;min-height:44px;border:0;background:transparent;color:var(--blue);border-radius:10px;cursor:pointer;vertical-align:middle;padding:0}.eye:hover{background:#EEF1F6}
 .muted{color:var(--mute);font-size:13px}.err{color:#9B1C1C}
 @media(max-width:700px){main{padding:18px 14px}nav{max-width:none}}
 </style></head><body>
@@ -60,6 +61,7 @@ dt{color:var(--mute)}dd{margin:0;font-weight:600}
     <a id="navEmp" href="#/employees">কর্মচারী</a>
     <a class="soon" href="#">ছুটি</a><a class="soon" href="#">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
+    <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
     <div class="me"><div id="meName"></div><div id="meRole"></div><button id="logout">লগআউট</button></div>
   </nav>
   <main id="view" aria-live="polite"></main>
@@ -104,6 +106,7 @@ async function start(){
     ME = await api('me');
     $('meName').textContent = ME.name || ME.email;
     $('meRole').textContent = ROLE[ME.role] || ME.role;
+    $('navUsers').classList.toggle('hide', ME.role!=='Super Admin');
     $('login').classList.add('hide'); $('app').classList.remove('hide');
     route();
   }catch(e){
@@ -134,23 +137,48 @@ window.addEventListener('load',()=>{
 
 /* ---------- pages ---------- */
 window.addEventListener('hashchange',()=>{ if(ME) route(); });
+const EYE='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYEOFF='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.1-5.9M9.9 4.2A10.7 10.7 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.2 3.2M1 1l22 22"/></svg>';
+const MASK='৳ ••••••';
+let hideTimer=null;
+function autoHide(fn){ clearTimeout(hideTimer); hideTimer=setTimeout(fn,60000); }
 function route(){
+  clearTimeout(hideTimer);
   const h = location.hash || '#/employees';
+  document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
+  if(h==='#/users'){ $('navUsers').classList.add('on'); usersPage(); return; }
   $('navEmp').classList.add('on');
   if(m) profile(decodeURIComponent(m[1])); else employees();
 }
 const FRI = g => (g==='TRN'||g==='CCTV') ? 'ছুটি (বিকাল ৩:৩০ থেকে)' : 'কাজ করেন';
 const BON = e => e==='Fixed' ? 'Fixed ৫০%' : e==='Discretionary' ? 'ইচ্ছামতো' : e==='None' ? 'নেই' : '—';
+const eyeBtn=(id,on,label)=>'<button class="eye" data-eye="'+esc(id)+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+label+'" title="'+label+'">'+(on?EYEOFF:EYE)+'</button>';
 
 async function employees(){
   const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
   try{
     const rows = await api('employees.list');
-    const sal = rows.length && rows[0].monthly_salary !== undefined;
-    v.innerHTML = '<h1 class="t">কর্মচারী</h1><div class="sub">মোট '+rows.length+' জন</div><div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>নাম</th><th>পদ</th><th>অবস্থা</th><th>শুক্রবার সকাল</th>'+(sal?'<th style="text-align:right">মাসিক বেতন</th>':'')+'<th>ঈদ বোনাস</th></tr></thead><tbody>'+
-      rows.map(r=>'<tr><td class="muted">'+esc(r.employee_id)+'</td><td><a href="#/employee/'+encodeURIComponent(r.employee_id)+'" style="font-weight:700;text-decoration:none">'+esc(r.name_bn)+'</a></td><td>'+esc(r.designation)+'</td><td><span class="chip">'+esc(r.status)+'</span></td><td class="muted">'+FRI(r.shift_group_id)+'</td>'+(sal?'<td style="text-align:right;font-weight:600">'+bn(r.monthly_salary)+'</td>':'')+'<td class="muted">'+BON(r.eid_bonus_mode)+'</td></tr>').join('')+
-      '</tbody></table></div>'+(sal?'<div class="muted" style="margin-top:12px">বেতনের ঘর শুধু অনুমতিপ্রাপ্তরা দেখতে পান।</div>':'')+'</div>';
+    const sal = ME.can.salary;
+    let SAL=null, shown=new Set();
+    const salCell=r=>{ const on=shown.has(r.employee_id); return '<span>'+(on&&SAL?bn(SAL[r.employee_id]):MASK)+'</span> '+eyeBtn(r.employee_id,on,on?'বেতন লুকান':'বেতন দেখুন'); };
+    const draw=()=>{
+      const allOn = rows.length>0 && rows.every(r=>shown.has(r.employee_id));
+      v.innerHTML = '<h1 class="t">কর্মচারী</h1><div class="sub">মোট '+rows.length+' জন</div><div class="card"><div class="tw"><table><thead><tr><th>ID</th><th>নাম</th><th>পদ</th><th>অবস্থা</th><th>শুক্রবার সকাল</th>'+(sal?'<th style="text-align:right">মাসিক বেতন <button class="btn" style="min-height:36px;padding:0 10px;font-size:13px;margin-left:6px" id="allEye">'+(allOn?'সব লুকান':'সব দেখান')+'</button></th>':'')+'<th>ঈদ বোনাস</th></tr></thead><tbody>'+
+        rows.map(r=>'<tr><td class="muted">'+esc(r.employee_id)+'</td><td><a href="#/employee/'+encodeURIComponent(r.employee_id)+'" style="font-weight:700;text-decoration:none">'+esc(r.name_bn)+'</a></td><td>'+esc(r.designation)+'</td><td><span class="chip">'+esc(r.status)+'</span></td><td class="muted">'+FRI(r.shift_group_id)+'</td>'+(sal?'<td style="text-align:right;font-weight:600;white-space:nowrap">'+salCell(r)+'</td>':'')+'<td class="muted">'+BON(r.eid_bonus_mode)+'</td></tr>').join('')+
+        '</tbody></table></div>'+(sal?'<div class="muted" style="margin-top:12px">বেতন ডিফল্টভাবে লুকানো থাকে। চোখের আইকনে চাপলে দেখা যায়, আবার চাপলে লুকায়। ১ মিনিট পর নিজে লুকিয়ে যায়।</div>':'')+'</div>';
+      v.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>toggle(b.dataset.eye));
+      const ae=$('allEye'); if(ae) ae.onclick=()=>toggle(null);
+    };
+    const toggle=async id=>{
+      try{
+        if(!SAL) SAL = await api('salary.get');
+        if(id===null){ const allOn=rows.every(r=>shown.has(r.employee_id)); rows.forEach(r=>allOn?shown.delete(r.employee_id):shown.add(r.employee_id)); }
+        else if(shown.has(id)) shown.delete(id); else shown.add(id);
+        draw(); autoHide(()=>{ shown.clear(); SAL=null; draw(); });
+      }catch(e){ fail(e); }
+    };
+    draw();
   }catch(e){ fail(e); }
 }
 
@@ -159,13 +187,33 @@ async function profile(id){
   try{
     const r = await api('employees.get',{id});
     const f=(k,val)=>'<dt>'+k+'</dt><dd>'+(val?esc(val):'<span class="muted">এখনও দেওয়া হয়নি</span>')+'</dd>';
-    let h = '<p><a href="#/employees" class="btn">← কর্মচারী তালিকা</a></p><h1 class="t">'+esc(r.name_bn)+'</h1><div class="sub">'+esc(r.name_en)+' · '+esc(r.employee_id)+'</div>'+
-      '<div class="card"><h2>সাধারণ তথ্য</h2><dl>'+f('পদ',r.designation)+f('অবস্থা',r.status)+f('যোগদানের তারিখ',r.joining_date)+f('চাকরির ধরন',r.employment_type)+f('মোবাইল',r.mobile)+f('ঠিকানা',r.address)+f('জরুরি যোগাযোগ',r.emergency_contact)+f('শুক্রবার সকাল',FRI(r.shift_group_id))+f('ঈদ বোনাস',BON(r.eid_bonus_mode))+(r.nid_number!==undefined?f('NID',r.nid_number):'')+'</dl></div>';
-    if(r.salary_history){
-      h += '<div class="card"><h2>বেতনের ইতিহাস</h2><div class="tw"><table><thead><tr><th>কার্যকর তারিখ</th><th style="text-align:right">মাসিক বেতন</th><th>কারণ</th></tr></thead><tbody>'+
-        r.salary_history.map(s=>'<tr><td>'+(s.effective_from?esc(s.effective_from):'<span class="muted">তারিখ বসাতে হবে</span>')+'</td><td style="text-align:right;font-weight:600">'+bn(s.monthly_salary)+'</td><td class="muted">'+esc(s.reason)+'</td></tr>').join('')+'</tbody></table></div></div>';
-    }
-    v.innerHTML = h;
+    let hist=null;
+    const draw=()=>{
+      let h = '<p><a href="#/employees" class="btn">← কর্মচারী তালিকা</a></p><h1 class="t">'+esc(r.name_bn)+'</h1><div class="sub">'+esc(r.name_en)+' · '+esc(r.employee_id)+'</div>'+
+        '<div class="card"><h2>সাধারণ তথ্য</h2><dl>'+f('পদ',r.designation)+f('অবস্থা',r.status)+f('যোগদানের তারিখ',r.joining_date)+f('চাকরির ধরন',r.employment_type)+f('মোবাইল',r.mobile)+f('ঠিকানা',r.address)+f('জরুরি যোগাযোগ',r.emergency_contact)+f('শুক্রবার সকাল',FRI(r.shift_group_id))+f('ঈদ বোনাস',BON(r.eid_bonus_mode))+(r.nid_number!==undefined?f('NID',r.nid_number):'')+'</dl></div>';
+      if(ME.can.salary){
+        h += '<div class="card"><h2>বেতনের ইতিহাস '+eyeBtn('hist',!!hist,hist?'বেতন লুকান':'বেতন দেখুন')+'</h2>'+
+          (hist?'<div class="tw"><table><thead><tr><th>কার্যকর তারিখ</th><th style="text-align:right">মাসিক বেতন</th><th>কারণ</th></tr></thead><tbody>'+hist.map(s=>'<tr><td>'+(s.effective_from?esc(s.effective_from):'<span class="muted">তারিখ বসাতে হবে</span>')+'</td><td style="text-align:right;font-weight:600">'+bn(s.monthly_salary)+'</td><td class="muted">'+esc(s.reason)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">বেতন লুকানো আছে। চোখের আইকনে চাপুন।</p>')+'</div>';
+      }
+      v.innerHTML=h;
+      const b=v.querySelector('[data-eye]'); if(b) b.onclick=async()=>{
+        try{ if(hist) hist=null; else { hist=await api('salary.get',{id}); autoHide(()=>{hist=null;draw();}); } draw(); }catch(e){ fail(e); }
+      };
+    };
+    draw();
+  }catch(e){ fail(e); }
+}
+
+async function usersPage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const rows = await api('users.list');
+    v.innerHTML='<h1 class="t">ব্যবহারকারী</h1><div class="sub">কাউকে জোর করে লগআউট করালে তিনি পরের অনুরোধেই বেরিয়ে যাবেন এবং আবার Google দিয়ে ঢুকতে হবে।</div><div class="card"><div class="tw"><table><thead><tr><th>নাম</th><th>ইমেইল</th><th>ভূমিকা</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
+      rows.map(u=>'<tr><td style="font-weight:600">'+(u.name?esc(u.name):'<span class="muted">—</span>')+'</td><td>'+esc(u.email)+'</td><td>'+esc(ROLE[u.role]||u.role)+'</td><td><span class="chip'+(u.is_active?'':' o')+'">'+(u.is_active?'Active':'বন্ধ')+'</span></td><td><button class="btn" data-lo="'+esc(u.user_id)+'">লগআউট করান</button></td></tr>').join('')+
+      '</tbody></table></div><div style="margin-top:16px"><button class="btn" id="loAll">সবাইকে লগআউট করান (আমি ছাড়া)</button></div><div id="loMsg" class="muted" style="margin-top:12px" role="status"></div></div>';
+    const run=async(p,q)=>{ if(!confirm(q)) return; try{ const r=await api('users.forceLogout',p); $('loMsg').textContent=r.logged_out+' জনকে লগআউট করানো হয়েছে।'; }catch(e){ fail(e); } };
+    v.querySelectorAll('[data-lo]').forEach(b=>b.onclick=()=>run({user_id:b.dataset.lo},'এই ব্যবহারকারীকে লগআউট করাবেন?'));
+    $('loAll').onclick=()=>run({all:true},'আপনি ছাড়া সবাইকে লগআউট করাবেন?');
   }catch(e){ fail(e); }
 }
 function fail(e){
