@@ -185,13 +185,13 @@ const eyeBtn=(id,on,label)=>'<button class="eye" data-eye="'+esc(id)+'" aria-pre
 
 let META=null;
 async function meta(){ if(!META) META=await api('meta.get'); return META; }
-const LBL={name_bn:'নাম (বাংলা)',name_en:'নাম (ইংরেজি)',mobile:'মোবাইল',address:'ঠিকানা',emergency_contact:'জরুরি যোগাযোগ',nid_number:'NID নম্বর',joining_date:'যোগদানের তারিখ',employment_type:'চাকরির ধরন',shift_group_id:'শিফট গ্রুপ',eid_bonus_mode:'ঈদ বোনাসের ধরন'};
+const LBL={name_bn:'নাম (বাংলা)',name_en:'নাম (ইংরেজি)',mobile:'মোবাইল',address:'বর্তমান ঠিকানা',birth_date:'জন্ম তারিখ',permanent_address:'স্থায়ী ঠিকানা',emergency_contact:'জরুরি যোগাযোগ',nid_number:'NID নম্বর',joining_date:'যোগদানের তারিখ',employment_type:'চাকরির ধরন',shift_group_id:'শিফট গ্রুপ',eid_bonus_mode:'ঈদ বোনাসের ধরন'};
 const BONL={Fixed:'Fixed ৫০%',Discretionary:'ইচ্ছামতো',None:'নেই'};
 const STL={Active:'সক্রিয়',Inactive:'নিষ্ক্রিয়',Resigned:'চাকরি ছেড়েছেন','Terminated':'বরখাস্ত','On Leave':'ছুটিতে'};
 const sel=(id,opts,cur,blank)=>'<select id="'+id+'">'+(blank?'<option value="">— বাছাই করুন —</option>':'')+opts.map(o=>'<option value="'+esc(o.v)+'"'+(String(o.v)===String(cur)?' selected':'')+'>'+esc(o.t)+'</option>').join('')+'</select>';
 function fld(k,val,m){
   const id='f_'+k; let c;
-  if(k==='joining_date') c='<input id="'+id+'" type="date" value="'+esc(val)+'">';
+  if(k==='joining_date'||k==='birth_date') c='<input id="'+id+'" type="date" value="'+esc(val)+'">';
   else if(k==='employment_type') c=sel(id,m.emp_types.map(x=>({v:x,t:x})),val,true);
   else if(k==='shift_group_id') c=sel(id,m.shifts.map(x=>({v:x.id,t:x.name})),val,false);
   else if(k==='eid_bonus_mode') c=sel(id,m.eid_modes.map(x=>({v:x,t:BONL[x]})),val,false);
@@ -246,6 +246,9 @@ async function profile(id){
   const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
   try{
     const [r,m] = await Promise.all([api('employees.get',{id}), meta()]);
+    let EX = r.personal ? await api('extras.list',{id}) : null;
+    let exEdit=null;
+    const canEx = id===ME.employee_id || ME.can.sa;
     const photo = r.has_photo ? api('photo.get',{id}).catch(()=>null) : Promise.resolve(null);
     const canPhoto = ME.can.editOthers || id===ME.employee_id;
     let hist=null, mode='view', panel='';
@@ -261,9 +264,14 @@ async function profile(id){
         (ME.can.manage?'<button class="btn" id="bDes">পদবী বদল</button>'+(id!==ME.employee_id?'<button class="btn" id="bSt">অবস্থা বদল</button>':''):'')+(ME.can.salaryEdit?'<button class="btn" id="bSal">বেতন বদল</button>':'')+
         '</div></div></div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+(panel?'<div class="card">'+panel+'</div>':'');
       if(mode==='edit'){
-        h += '<div class="card"><h2>তথ্য সম্পাদনা</h2><div class="grid">'+r.editable.map(k=>fld(k,k==='nid_number'?r.nid_number:r[k],m)).join('')+'</div><div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="bSave">সংরক্ষণ করুন</button><button class="btn" id="bCancel">বাতিল</button></div></div>';
+        h += '<div class="card"><h2>তথ্য সম্পাদনা</h2><div class="grid">'+r.editable.map(k=>fld(k,r[k],m)).join('')+'</div><div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="bSave">সংরক্ষণ করুন</button><button class="btn" id="bCancel">বাতিল</button></div></div>';
       } else {
-        h += '<div class="card"><h2>সাধারণ তথ্য</h2><dl>'+f('পদ',r.designation)+f('যোগদানের তারিখ',r.joining_date)+f('চাকরির ধরন',r.employment_type)+f('মোবাইল',r.mobile)+f('ঠিকানা',r.address)+f('জরুরি যোগাযোগ',r.emergency_contact)+f('শুক্রবার সকাল',FRI(r.shift_group_id))+f('ঈদ বোনাস',BON(r.eid_bonus_mode))+(r.last_working_date?f('শেষ কাজের তারিখ',r.last_working_date):'')+(r.nid_number!==undefined?f('NID',r.nid_number):'')+'</dl></div>';
+        h += '<div class="card"><h2>সাধারণ তথ্য</h2><dl>'+f('পদ',r.designation)+f('যোগদানের তারিখ',r.joining_date)+f('চাকরির ধরন',r.employment_type)+f('মোবাইল',r.mobile)+f('বর্তমান ঠিকানা',r.address)+(r.personal?f('স্থায়ী ঠিকানা',r.permanent_address)+f('জন্ম তারিখ',r.birth_date):'')+f('জরুরি যোগাযোগ',r.emergency_contact)+f('শুক্রবার সকাল',FRI(r.shift_group_id))+f('ঈদ বোনাস',BON(r.eid_bonus_mode))+(r.last_working_date?f('শেষ কাজের তারিখ',r.last_working_date):'')+(r.nid_number!==undefined?f('NID',r.nid_number):'')+'</dl></div>';
+      }
+      if(EX){
+        const val=x=>/^https?:\/\//i.test(x.value)?'<a href="'+esc(x.value)+'" target="_blank" rel="noopener noreferrer">'+esc(x.value)+'</a>':esc(x.value);
+        h += '<div class="card"><h2>অতিরিক্ত তথ্য</h2>'+(EX.length?'<dl>'+EX.map(x=>'<dt>'+esc(x.label)+'</dt><dd style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="word-break:break-word">'+val(x)+'</span>'+(canEx?'<button class="btn" style="min-height:36px;font-size:13px" data-xe="'+esc(x.extra_id)+'">সম্পাদনা</button><button class="btn" style="min-height:36px;font-size:13px;border-color:#9B1C1C;color:#9B1C1C" data-xd="'+esc(x.extra_id)+'">মুছুন</button>':'')+'</dd>').join('')+'</dl>':'<p class="muted">এখনও কোনো অতিরিক্ত তথ্য নেই।</p>')+
+          (canEx?'<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px"><div class="grid"><div class="fld"><label for="x_l">ঘরের নাম (যেমন: ফেসবুক লিংক)</label><input id="x_l" type="text" list="x_dl" value="'+esc(exEdit?exEdit.label:'')+'"><datalist id="x_dl"><option value="ফেসবুক লিংক"><option value="ইনস্টাগ্রাম লিংক"><option value="লিংকডইন লিংক"><option value="হোয়াটসঅ্যাপ নম্বর"><option value="ইমেইল"><option value="রক্তের গ্রুপ"></datalist></div><div class="fld"><label for="x_v">মান</label><input id="x_v" type="text" value="'+esc(exEdit?exEdit.value:'')+'"></div></div><div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="xGo">'+(exEdit?'হালনাগাদ করুন':'+ নতুন তথ্য যোগ')+'</button>'+(exEdit?'<button class="btn" id="xCancel">বাতিল</button>':'')+'<span class="muted" style="align-self:center">সর্বোচ্চ ২০টি</span></div></div>':'')+'</div>';
       }
       if(ME.can.salary){
         h += '<div class="card"><h2>বেতনের ইতিহাস '+eyeBtn('hist',!!hist,hist?'বেতন লুকান':'বেতন দেখুন')+'</h2>'+
@@ -284,6 +292,10 @@ async function profile(id){
       const eb=v.querySelector('[data-eye]'); if(eb) eb.onclick=async()=>{
         try{ if(hist) hist=null; else { hist=await api('salary.get',{id}); autoHide(()=>{hist=null;draw();}); } draw(); }catch(e){ fail(e); }
       };
+      v.querySelectorAll('[data-xe]').forEach(b=>b.onclick=()=>{ exEdit=EX.find(x=>x.extra_id===b.dataset.xe); draw(); const e=$('x_l'); if(e) e.scrollIntoView({behavior:'smooth',block:'center'}); });
+      v.querySelectorAll('[data-xd]').forEach(b=>b.onclick=async()=>{ if(!confirm('এই তথ্যটি মুছবেন?')) return; try{ await api('extras.delete',{extra_id:b.dataset.xd}); EX=await api('extras.list',{id}); exEdit=null; draw(); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } });
+      on('xCancel',()=>{ exEdit=null; draw(); });
+      on('xGo',async()=>{ try{ await api('extras.save',{id,extra_id:exEdit?exEdit.extra_id:'',label:$('x_l').value,value:$('x_v').value}); EX=await api('extras.list',{id}); exEdit=null; draw(); say('সংরক্ষণ হয়েছে।',true); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } });
       on('phDel',async()=>{ if(!confirm('ছবিটি সরিয়ে ফেলবেন?')) return; try{ await api('photo.remove',{id}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } });
       const pi=$('phIn'); if(pi) pi.onchange=async()=>{ try{ say('ছবি পাঠানো হচ্ছে...',true); const d=await resize(pi.files[0],480); await api('photo.set',{id,dataUrl:d}); profile(id); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
     };
