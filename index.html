@@ -83,6 +83,7 @@ button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
 .scanbox video{width:100%;display:block;max-height:60vh;object-fit:cover}
 .scanbox .scoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#C9D3F0;font-size:16px;background:#0b1020}
 .cardpv canvas{cursor:zoom-in}
+.pvrow{padding:12px 0;border-top:1px solid var(--line)}.pvrow:first-child{border-top:0}.pvname{font-weight:600;margin-bottom:4px}
 .scanbox .frame{position:absolute;inset:16% 18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none}
 .bigbtn{flex:1;min-height:68px;border:0;border-radius:14px;font:700 22px 'Noto Sans Bengali','Inter',sans-serif;transition:transform .15s ease,box-shadow .2s ease}
 .bigbtn:hover{box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateY(-1px)}.bigbtn:active{transform:scale(.97)}
@@ -407,18 +408,37 @@ async function cardsPage(){
     '<div class="card"><div class="fld"><label for="c_ids">ID নম্বর</label><textarea id="c_ids" placeholder="যেমন: EMP-001, EMP-004   অথবা   EMP-001 থেকে EMP-006"></textarea></div>'+
     '<label style="display:flex;gap:8px;align-items:flex-start;min-height:44px;margin-top:10px"><input type="checkbox" id="c_new" style="margin-top:4px"> <span>নতুন QR দিয়ে তৈরি করুন। পুরনো কার্ডের QR বাতিল হয়ে যাবে। (না চাপলে আগের QR-ই থাকবে।)</span></label>'+
     '<div class="grid" style="margin-top:10px;max-width:360px"><div class="fld"><label for="c_lang">প্রিন্টের ভাষা</label>'+sel('c_lang',[{v:'bn',t:'বাংলা'},{v:'en',t:'English'}],'bn',false)+'</div></div>'+
-    '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="c_go">কার্ড তৈরি করুন ও প্রিন্ট PDF নামান</button><button class="btn" id="c_pdf">তৈরি না করে শুধু প্রিন্ট PDF নামান</button></div>'+
-    '<div class="muted" style="margin-top:12px">প্রিন্ট PDF-এ প্রতি পাতায় ৯টি কার্ড থাকে। প্রথমে সামনের পাতা, তারপর পেছনের পাতা (দুই পাশে প্রিন্টের জন্য আয়না-উল্টো সাজানো)। প্রিন্টারে "Long edge" দিয়ে দুই পাশে প্রিন্ট দিন।</div><div id="c_out" style="margin-top:14px"></div></div>';
+    '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="c_go">কার্ড তৈরি করুন ও প্রিভিউ দেখুন</button><button class="btn" id="c_pdf">নতুন তৈরি না করে শুধু প্রিভিউ দেখুন</button></div>'+
+    '<div class="muted" style="margin-top:12px">প্রিভিউ দেখে ঠিক থাকলে তারপর A4 প্রিন্ট PDF নামাবেন। PDF-এ প্রতি পাতায় ৯টি কার্ড থাকে। প্রথমে সামনের পাতা, তারপর পেছনের পাতা (দুই পাশে প্রিন্টের জন্য আয়না-উল্টো সাজানো)। প্রিন্টারে "Long edge" দিয়ে দুই পাশে প্রিন্ট দিন।</div><div id="c_out" style="margin-top:14px"></div></div><div id="c_pv"></div>';
   const ids=()=>IDCARD.parseIds($('c_ids').value);
-  const sheet=async list=>{
-    const lang=$('c_lang').value, o=$('c_out');
-    const prog=document.createElement('p'); prog.className='muted'; prog.textContent='PDF তৈরি হচ্ছে...'; o.appendChild(prog);
-    const d=await api('cards.get',{ids:list}); const cards=[];
-    for(const c of d.cards){ cards.push(await IDCARD.renderCard(c,d.company,lang,'logo.png')); }
-    IDCARD.pdfSheet(cards,'royal_cards_'+lang+'.pdf'); prog.remove();
-    say(cards.length+'টি কার্ডের PDF নামানো হয়েছে।',true);
+  let PV=null;   // the cards currently shown in the preview
+  const drawPreview=async()=>{
+    const box=$('c_pv'); if(!PV||!box) return;
+    const lang=$('c_lang').value;
+    box.innerHTML='<div class="card"><p class="muted">প্রিভিউ আঁকা হচ্ছে...</p></div>';
+    const cards=[];
+    for(const c of PV.d.cards){ cards.push(await IDCARD.renderCard(c,PV.d.company,lang,'logo.png')); }
+    PV.rendered=cards;
+    box.innerHTML='<div class="card"><h2>প্রিভিউ ('+bnd(cards.length)+'টি কার্ড, '+(lang==='bn'?'বাংলা':'English')+')</h2><div class="muted" style="margin-bottom:12px">বড় করে দেখতে কার্ডের ছবিতে চাপুন।</div><div id="pvList"></div>'+
+      '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="pvPdf">A4 প্রিন্ট PDF নামান ('+bnd(cards.length)+'টি কার্ড)</button></div></div>';
+    const list=$('pvList');
+    cards.forEach((cc,k)=>{
+      const row=document.createElement('div'); row.className='pvrow';
+      const label=document.createElement('div'); label.className='pvname'; label.textContent=PV.d.cards[k].name_bn+' · '+PV.d.cards[k].employee_id;
+      const imgs=document.createElement('div'); imgs.className='cardpv'; imgs.append(cc.front,cc.back);
+      [cc.front,cc.back].forEach(c=>{ c.title='বড় করে দেখুন'; c.onclick=()=>zoomCard(cc); });
+      row.append(label,imgs); list.appendChild(row);
+    });
+    $('pvPdf').onclick=()=>{ IDCARD.pdfSheet(PV.rendered,'royal_cards_'+lang+'.pdf'); say(cards.length+'টি কার্ডের PDF নামানো হয়েছে।',true); };
+    box.scrollIntoView({behavior:'smooth',block:'start'});
   };
-  const guard=async fn=>{ try{ await fn(); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+  const preview=async list=>{
+    const o=$('c_pv'); o.innerHTML='<div class="card"><p class="muted">কার্ডের তথ্য আনা হচ্ছে...</p></div>';
+    PV={d:await api('cards.get',{ids:list}),rendered:null};
+    await drawPreview();
+  };
+  const guard=async fn=>{ try{ await fn(); }catch(e){ $('c_pv').innerHTML=''; if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+  $('c_lang').onchange=()=>guard(drawPreview);
   $('c_go').onclick=()=>guard(async()=>{
     const list=ids(); if(!list.length){ say('সঠিক ID নম্বর লিখুন (যেমন EMP-001)।'); return; }
     const nq=$('c_new').checked;
@@ -426,9 +446,9 @@ async function cardsPage(){
     const res=await api('cards.issue',{ids:list,new_qr:nq});
     $('c_out').innerHTML='<table><thead><tr><th>ID</th><th>নাম</th><th>ফল</th></tr></thead><tbody>'+res.map(x=>'<tr><td>'+esc(x.id)+'</td><td>'+esc(x.name||'')+'</td><td>'+(x.ok?'<span class="ok">তৈরি হয়েছে</span>'+(x.warnings.length?' <span class="muted">('+esc(x.warnings.join(', '))+')</span>':''):'<span class="err">'+esc(x.error)+'</span>')+'</td></tr>').join('')+'</tbody></table>';
     const okIds=res.filter(x=>x.ok).map(x=>x.id);
-    if(okIds.length) await sheet(okIds); else say('কোনো কার্ড তৈরি হয়নি।');
+    if(okIds.length){ say(okIds.length+'টি কার্ড তৈরি হয়েছে। নিচে প্রিভিউ দেখুন।',true); await preview(okIds); } else say('কোনো কার্ড তৈরি হয়নি।');
   });
-  $('c_pdf').onclick=()=>guard(async()=>{ const list=ids(); if(!list.length){ say('সঠিক ID নম্বর লিখুন (যেমন EMP-001)।'); return; } await sheet(list); });
+  $('c_pdf').onclick=()=>guard(async()=>{ const list=ids(); if(!list.length){ say('সঠিক ID নম্বর লিখুন (যেমন EMP-001)।'); return; } $('c_out').innerHTML=''; await preview(list); });
 }
 
 async function companyPage(){
