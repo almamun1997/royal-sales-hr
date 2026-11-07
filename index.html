@@ -565,7 +565,7 @@ function payDraw(){
   const flag=r=>(r.locked?'<span class="chip'+(PST[r.pay_status][1]?' o':'')+'">'+PST[r.pay_status][0]+'</span> ':'')+(r.needs_choice?'<span class="chip o">বেতন-বদলের পছন্দ বাকি</span> ':'')+(r.partial?'<span class="chip o">আংশিক মাস</span> ':'')+(r.deduct_days?'<span class="chip o">কর্তন '+bnd(r.deduct_days)+' দিন</span> ':'');
   v.innerHTML='<h1 class="t">বেতন</h1><div class="sub">মাস বেছে সবার বেতনের হিসাব দেখুন। পূর্ণ মাস কাজ করলে পূর্ণ বেতন, আংশিক মাসে বেতন ÷ ৩০ × দিন। অনুপস্থিত দিনে কর্তন না বসালে বেতন কাটা যায় না।</div>'+
     '<div id="pMsg" role="alert"></div>'+
-    '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="pPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(D.month))+'</b><button class="btn" id="pNext" aria-label="পরের মাস"'+(D.month>=cur?' disabled':'')+'>›</button>'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span>'+(D.totals.locked?'<button class="btn" id="pAllSlip" style="margin-left:auto">সব পে স্লিপ (PDF)</button>':'')+'</div>'+
+    '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="pPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(D.month))+'</b><button class="btn" id="pNext" aria-label="পরের মাস"'+(D.month>=cur?' disabled':'')+'>›</button>'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span>'+'<button class="btn" id="pAllSlip" style="margin-left:auto" title="চূড়ান্ত হিসাবগুলোর পে স্লিপ">সব পে স্লিপ (PDF)</button>'+'</div>'+
     (D.month_over?'':'<div class="muted" style="margin-bottom:12px">⚠ মাস এখনও শেষ হয়নি। বাকি দিনগুলোও ধরে সাময়িক হিসাব দেখানো হচ্ছে।</div>')+
     (D.totals.pending?'<div class="err" style="margin-bottom:12px" role="alert">'+bnd(D.totals.pending)+' জনের বেতন এই মাসে বদলেছে। সুপার অ্যাডমিনকে হিসাবের উপায় বেছে নিতে হবে।</div>':'')+
     (D.can_edit&&D.totals.open>0?'<div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn pri" id="pFin"'+((!D.month_over||D.totals.pending)?' disabled':'')+'>এই মাসের হিসাব চূড়ান্ত করুন ('+bnd(D.totals.open)+' জন)</button><span class="muted">'+(!D.month_over?'মাস শেষ হলে চূড়ান্ত করা যাবে।':D.totals.pending?'আগে বেতন-বদলের উপায় বাছাই করুন।':'চূড়ান্ত হলে অঙ্ক আর বদলাবে না। পরে ভুল পেলে কারণ লিখে খোলা যাবে।')+'</span></div>':'')+
@@ -625,11 +625,19 @@ async function payslipPreview(ids,month){
     const D=await api('payroll.slips',{month:month,employee_ids:ids||undefined});
     if(!D.rows.length){ alert('এই মাসের পে স্লিপ এখনও তৈরি হয়নি। হিসাব চূড়ান্ত হলে পাওয়া যাবে।'); return; }
     const cans=[]; for(const s of D.rows) cans.push(await PAYSLIP.render(s,D.company,'logo.png'));
-    const m=modal('<h2 style="margin-top:0">পে স্লিপ — '+esc(pmLabel(month))+'</h2><p class="muted">'+bnd(cans.length)+'টি পে স্লিপ। নিচে দেখে নিয়ে PDF নামান (A4, প্রতি পাতায় একটি)।</p><div id="psBox" style="max-height:62vh;overflow:auto;background:#EEF1F7;padding:12px;border-radius:12px;display:grid;gap:12px;justify-items:center"></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
+    const multi=cans.length>1; let per=multi?4:1, pages=[];
+    const m=modal('<h2 style="margin-top:0">পে স্লিপ — '+esc(pmLabel(month))+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button></div>':'')+'<div id="psBox" style="max-height:62vh;overflow:auto;background:#EEF1F7;padding:12px;border-radius:12px;display:grid;gap:12px;justify-items:center"></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
     const box=m.querySelector('#psBox');
-    cans.forEach(c=>{ c.style.cssText='width:min(100%,560px);height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)'; box.append(c); });
+    const draw=()=>{
+      pages=PAYSLIP.layout(cans,per); box.innerHTML='';
+      pages.forEach(c=>{ c.style.cssText='width:min(100%,560px);height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)'; box.append(c); });
+      $('psInfo').textContent=bnd(cans.length)+'টি পে স্লিপ, '+bnd(pages.length)+' পাতার A4 PDF'+(per===4?' (প্রতি পাতায় ৪টি, মাঝে কাটার দাগ)':' (প্রতি পাতায় ১টি)')+'। দেখে নিয়ে PDF নামান।';
+      if(multi){ $('psL1').classList.toggle('pri',per===1); $('psL4').classList.toggle('pri',per===4); $('psL1').setAttribute('aria-pressed',per===1); $('psL4').setAttribute('aria-pressed',per===4); }
+    };
+    draw();
+    if(multi){ $('psL1').onclick=()=>{ per=1; draw(); }; $('psL4').onclick=()=>{ per=4; draw(); }; }
     $('psClose').onclick=()=>m.close();
-    $('psPdf').onclick=()=>{ PAYSLIP.pdf(cans, D.rows.length===1 ? 'payslip_'+D.rows[0].employee_id+'_'+month+'.pdf' : 'payslips_'+month+'.pdf'); };
+    $('psPdf').onclick=()=>{ PAYSLIP.pdf(pages, D.rows.length===1 ? 'payslip_'+D.rows[0].employee_id+'_'+month+'.pdf' : 'payslips_'+month+(per===4?'_4up':'')+'.pdf'); };
   }catch(e){ if(isAuthErr(e)) fail(e); else alert(errText(e)); }
 }
 /* ---- everyone else: only their own payslip ---- */
