@@ -489,10 +489,28 @@ async function usersPage(){
     const rows = await api('users.list');
     v.innerHTML='<h1 class="t">ব্যবহারকারী</h1><div class="sub">কাউকে জোর করে লগআউট করালে তিনি পরের অনুরোধেই বেরিয়ে যাবেন এবং আবার Google দিয়ে ঢুকতে হবে।'+(ME.can.realSa?' "ক্ষমতা দিন" চাপলে সেই ব্যবহারকারী সুপার অ্যাডমিনের মতো কাজ করতে পারবেন (আপনার অ্যাকাউন্টে হাত দেওয়া ছাড়া)। "ক্ষমতা তুলে নিন" চাপলে পরের অনুরোধ থেকেই বন্ধ হবে।':'')+'</div><div class="card"><div class="tw"><table><thead><tr><th>নাম</th><th>ইমেইল</th><th>ভূমিকা</th><th>অবস্থা</th><th>সুপার অ্যাডমিন ক্ষমতা</th><th></th></tr></thead><tbody>'+
       rows.map(u=>'<tr><td style="font-weight:600">'+(u.name?esc(u.name):'<span class="muted">—</span>')+'</td><td>'+esc(u.email)+'</td><td>'+esc(ROLE[u.role]||u.role)+'</td><td><span class="chip'+(u.is_active?'':' o')+'">'+(u.is_active?'Active':'বন্ধ')+'</span></td><td>'+(u.delegate?'<span class="chip o">আছে</span> ':'<span class="muted">—</span> ')+(ME.can.realSa&&u.role!=='Super Admin'&&u.is_active?'<button class="btn" data-dg="'+esc(u.user_id)+'" data-on="'+(u.delegate?'0':'1')+'" data-dn="'+esc(u.name||u.email)+'">'+(u.delegate?'ক্ষমতা তুলে নিন':'ক্ষমতা দিন')+'</button>':'')+'</td><td style="white-space:nowrap">'+(u.role==='Admin'?'<button class="btn" data-pm="'+esc(u.user_id)+'" data-pn="'+esc(u.name||u.email)+'">অনুমতি</button> ':'')+'<button class="btn" data-lo="'+esc(u.user_id)+'">লগআউট করান</button></td></tr>').join('')+
-      '</tbody></table></div><div style="margin-top:16px"><button class="btn" id="loAll">সবাইকে লগআউট করান (আমি ছাড়া)</button></div><div id="loMsg" class="muted" style="margin-top:12px" role="status"></div></div><div id="pmBox"></div>';
+      '</tbody></table></div><div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="uAdd">+ নতুন ব্যবহারকারী যোগ করুন</button><button class="btn" id="loAll">সবাইকে লগআউট করান (আমি ছাড়া)</button></div><div id="loMsg" class="muted" style="margin-top:12px" role="status"></div></div><div id="pmBox"></div>';
     const run=async(p,q)=>{ if(!confirm(q)) return; try{ const r=await api('users.forceLogout',p); $('loMsg').textContent=r.logged_out+' জনকে লগআউট করানো হয়েছে।'; }catch(e){ fail(e); } };
     v.querySelectorAll('[data-lo]').forEach(b=>b.onclick=()=>run({user_id:b.dataset.lo},'এই ব্যবহারকারীকে লগআউট করাবেন?'));
     $('loAll').onclick=()=>run({all:true},'আপনি ছাড়া সবাইকে লগআউট করাবেন?');
+    $('uAdd').onclick=async()=>{
+      try{
+        const emps=await api('employees.list'), have=new Set(rows.map(x=>x.employee_id).filter(Boolean));
+        const cand=emps.filter(e=>!have.has(e.employee_id)&&!['Inactive','Resigned','Terminated'].includes(e.status));
+        if(!cand.length){ $('loMsg').textContent='লগইন দেওয়ার মতো কোনো কর্মী বাকি নেই। সবার লগইন আগে থেকেই আছে।'; return; }
+        const m=modal('<h2 style="margin-top:0">নতুন ব্যবহারকারী</h2><p class="muted">যাঁকে লগইন দেবেন, তাঁর কর্মী-তথ্য বেছে Google (Gmail) ইমেইল ও ভূমিকা দিন।</p><div id="uMsg" role="alert"></div>'+
+          '<div class="fld"><label for="u_emp">কর্মী</label><select id="u_emp">'+cand.map(e=>'<option value="'+esc(e.employee_id)+'">'+esc(e.name_bn)+(e.designation?' — '+esc(e.designation):'')+'</option>').join('')+'</select></div>'+
+          '<div class="fld"><label for="u_em">Google ইমেইল</label><input id="u_em" type="email" autocomplete="off" placeholder="name@gmail.com"></div>'+
+          '<div class="fld"><label for="u_role">ভূমিকা</label><select id="u_role"><option value="Staff">কর্মচারী (শুধু নিজেরটা দেখবেন)</option><option value="Admin">অ্যাডমিন (অনুমতি অনুযায়ী)</option><option value="Owner">মালিক (সবার তথ্য দেখবেন, ছুটি অনুমোদন করবেন)</option></select></div>'+
+          '<div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="uGo">যোগ করুন</button><button class="btn" id="uNo">বাতিল</button></div>');
+        $('uNo').onclick=()=>m.close();
+        $('uGo').onclick=async()=>{
+          const b=$('uGo'); b.disabled=true;
+          try{ await api('users.add',{employee_id:$('u_emp').value,email:$('u_em').value,role:$('u_role').value}); m.close(); usersPage(); }
+          catch(e){ b.disabled=false; if(isAuthErr(e)) fail(e); else { $('uMsg').textContent=errText(e); $('uMsg').className='err'; } }
+        };
+      }catch(e){ if(isAuthErr(e)) fail(e); else $('loMsg').textContent=errText(e); }
+    };
     v.querySelectorAll('[data-dg]').forEach(b=>b.onclick=async()=>{
       const on=b.dataset.on==='1';
       if(!confirm(on?(b.dataset.dn+'-কে সুপার অ্যাডমিনের ক্ষমতা দেবেন?\n\nতিনি প্রায় সব কিছু দেখতে ও বদলাতে পারবেন (বেতন, ছুটি, হাজিরা, কর্মচারী, ব্যবহারকারী ইত্যাদি)। তবে আপনার অ্যাকাউন্ট মোছা, নিষ্ক্রিয় করা, লগআউট করানো, কিংবা অন্য কাউকে এই ক্ষমতা দেওয়া বা তুলে নেওয়া তিনি পারবেন না। আপনি না তোলা পর্যন্ত এটি চালু থাকবে এবং তাঁর সব কাজ লগে লেখা হবে।'):(b.dataset.dn+'-এর কাছ থেকে সুপার অ্যাডমিনের ক্ষমতা তুলে নেবেন? তুলে নেওয়ার পর পরের অনুরোধ থেকেই কার্যকর হবে।'))) return;
