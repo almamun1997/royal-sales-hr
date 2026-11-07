@@ -81,6 +81,8 @@ button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:13px;color:var(--mute)}.legend span{display:flex;align-items:center;gap:6px}
 .scanbox{position:relative;max-width:460px;margin:0 auto;border-radius:14px;overflow:hidden;background:#0b1020;min-height:240px}
 .scanbox video{width:100%;display:block;max-height:60vh;object-fit:cover}
+.scanbox .scoff{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#C9D3F0;font-size:16px;background:#0b1020}
+.cardpv canvas{cursor:zoom-in}
 .scanbox .frame{position:absolute;inset:16% 18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none}
 .bigbtn{flex:1;min-height:68px;border:0;border-radius:14px;font:700 22px 'Noto Sans Bengali','Inter',sans-serif;transition:transform .15s ease,box-shadow .2s ease}
 .bigbtn:hover{box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateY(-1px)}.bigbtn:active{transform:scale(.97)}
@@ -288,6 +290,7 @@ async function employees(){
   }catch(e){ fail(e); }
 }
 
+let CARD_OPEN_NEXT=false;
 async function profile(id){
   const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
   try{
@@ -297,7 +300,7 @@ async function profile(id){
     const canEx = id===ME.employee_id || ME.can.sa;
     const photo = r.has_photo ? api('photo.get',{id}).catch(()=>null) : Promise.resolve(null);
     const canPhoto = ME.can.editOthers || id===ME.employee_id;
-    let hist=null, mode='view', panel='', cardRes=null, cardLang='bn', cardPanel=false, cardCanv=null;
+    let hist=null, mode='view', panel='', cardRes=null, cardLang='bn', cardPanel=false, cardCanv=null, cardOpen=CARD_OPEN_NEXT; CARD_OPEN_NEXT=false;
     const f=(k,val)=>'<dt>'+k+'</dt><dd>'+(val?esc(val):'<span class="muted">এখনও দেওয়া হয়নি</span>')+'</dd>';
     const today=new Date().toISOString().slice(0,10);
     const draw=()=>{
@@ -321,8 +324,9 @@ async function profile(id){
       }
       if(id===ME.employee_id || ME.can.sa){
         const issued=!!r.card_issued_at;
-        h += '<div class="card"><h2>আইডি কার্ড</h2>'+(issued?'<p class="muted">কার্ড তৈরি: '+esc(r.card_issued_at)+' · সংস্করণ '+esc(r.card_version||1)+'</p><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="muted" for="cLang">ভাষা</label>'+sel('cLang',[{v:'bn',t:'বাংলা'},{v:'en',t:'English'}],cardLang,false)+'</div><div id="cardPv" class="cardpv"><span class="muted">লোড হচ্ছে...</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="cPdf">PDF ডাউনলোড</button><button class="btn" id="cPf">সামনের ছবি (PNG)</button><button class="btn" id="cPb">পেছনের ছবি (PNG)</button></div>':'<p class="muted">'+(ME.can.sa?'কার্ড এখনও তৈরি হয়নি।':'আপনার কার্ড এখনও তৈরি হয়নি। তৈরি হলে এখানে ডাউনলোড করতে পারবেন।')+'</p>')+
-          (ME.can.sa?'<div style="margin-top:14px"><button class="btn" id="cIssue" style="'+(issued?'':'background:var(--orange);border-color:var(--orange);color:var(--ink);font-weight:700')+'">'+(issued?'আবার তৈরি করুন':'আইডি কার্ড তৈরি')+'</button></div>'+(cardPanel?'<div style="margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:10px"><label style="display:flex;gap:8px;align-items:flex-start;min-height:44px"><input type="checkbox" id="cNew" style="margin-top:4px"> <span>নতুন QR দিয়ে তৈরি করুন। পুরনো কার্ডের QR তখন থেকে আর কাজ করবে না। (না চাপলে একই QR থাকবে।)</span></label><div style="margin-top:8px;display:flex;gap:10px"><button class="btn pri" id="cGo">নিশ্চিত করুন</button><button class="btn" id="cNo">বাতিল</button></div></div>':''):'')+'</div>';
+        h += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">আইডি কার্ড <span class="muted" style="font-size:13px;font-weight:400">'+(issued?'· তৈরি হয়েছে':'· এখনও তৈরি হয়নি')+'</span></h2><button class="btn" id="cToggle" aria-expanded="'+cardOpen+'">'+(cardOpen?'বন্ধ করুন ▴':'আইডি কার্ড দেখুন ▾')+'</button></div>'+
+          (cardOpen?'<div style="margin-top:14px">'+(issued?'<p class="muted">কার্ড তৈরি: '+esc(r.card_issued_at)+' · সংস্করণ '+esc(r.card_version||1)+' · বড় করে দেখতে ছবিতে চাপুন</p><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="muted" for="cLang">ভাষা</label>'+sel('cLang',[{v:'bn',t:'বাংলা'},{v:'en',t:'English'}],cardLang,false)+'</div><div id="cardPv" class="cardpv"><span class="muted">লোড হচ্ছে...</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="cPdf">PDF ডাউনলোড</button><button class="btn" id="cPf">সামনের ছবি (PNG)</button><button class="btn" id="cPb">পেছনের ছবি (PNG)</button></div>':'<p class="muted">'+(ME.can.sa?'কার্ড এখনও তৈরি হয়নি।':'আপনার কার্ড এখনও তৈরি হয়নি। তৈরি হলে এখানে ডাউনলোড করতে পারবেন।')+'</p>')+
+          (ME.can.sa?'<div style="margin-top:14px"><button class="btn" id="cIssue" style="'+(issued?'':'background:var(--orange);border-color:var(--orange);color:var(--ink);font-weight:700')+'">'+(issued?'আবার তৈরি করুন':'আইডি কার্ড তৈরি')+'</button></div>'+(cardPanel?'<div style="margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:10px"><label style="display:flex;gap:8px;align-items:flex-start;min-height:44px"><input type="checkbox" id="cNew" style="margin-top:4px"> <span>নতুন QR দিয়ে তৈরি করুন। পুরনো কার্ডের QR তখন থেকে আর কাজ করবে না। (না চাপলে একই QR থাকবে।)</span></label><div style="margin-top:8px;display:flex;gap:10px"><button class="btn pri" id="cGo">নিশ্চিত করুন</button><button class="btn" id="cNo">বাতিল</button></div></div>':''):'')+'</div>':'')+'</div>';
       }
       if(ME.can.salary){
         h += '<div class="card"><h2>বেতনের ইতিহাস '+eyeBtn('hist',!!hist,hist?'বেতন লুকান':'বেতন দেখুন')+'</h2>'+
@@ -353,6 +357,8 @@ async function profile(id){
       on('cPdf',()=>{ if(cardCanv) IDCARD.pdfSingle(cardCanv.front,cardCanv.back,id+'_'+cardLang+'.pdf'); });
       on('cPf',()=>{ if(cardCanv) IDCARD.savePng(cardCanv.front,id+'_'+cardLang+'_front.png'); });
       on('cPb',()=>{ if(cardCanv) IDCARD.savePng(cardCanv.back,id+'_'+cardLang+'_back.png'); });
+      on('cToggle',async()=>{ cardOpen=!cardOpen; draw();
+        if(cardOpen&&r.card_issued_at&&!cardRes&&(id===ME.employee_id||ME.can.sa)){ try{ cardRes=await api('cards.get',{ids:[id]}); showCard(); }catch(e){ const b=$('cardPv'); if(b) b.textContent=errText(e); } } });
       on('cIssue',()=>{ if(r.card_issued_at){ cardPanel=true; draw(); } else issueCard(false); });
       on('cNo',()=>{ cardPanel=false; draw(); });
       on('cGo',()=>issueCard($('cNew').checked));
@@ -360,17 +366,17 @@ async function profile(id){
     };
     const showCard=async()=>{
       const box=$('cardPv'); if(!box||!cardRes) return;
-      try{ cardCanv=await IDCARD.renderCard(cardRes.cards[0],cardRes.company,cardLang,'logo.png'); box.innerHTML=''; box.append(cardCanv.front,cardCanv.back); }catch(e){ box.textContent='কার্ড আঁকা যায়নি: '+e.message; }
+      try{ cardCanv=await IDCARD.renderCard(cardRes.cards[0],cardRes.company,cardLang,'logo.png'); box.innerHTML=''; box.append(cardCanv.front,cardCanv.back); [cardCanv.front,cardCanv.back].forEach(c=>{ c.title='বড় করে দেখুন'; c.onclick=()=>zoomCard(cardCanv); }); }catch(e){ box.textContent='কার্ড আঁকা যায়নি: '+e.message; }
     };
     const issueCard=async nq=>{
       try{ const res=await api('cards.issue',{ids:[id],new_qr:nq}); const x=res[0];
         if(!x.ok){ say(x.error); return; }
         say('কার্ড তৈরি হয়েছে।'+(x.warnings.length?' সতর্কতা: '+x.warnings.join(', ')+'।':''),true);
-        setTimeout(()=>profile(id),900); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); }
+        CARD_OPEN_NEXT=true; setTimeout(()=>profile(id),900); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); }
     };
     const act=async(a,p)=>{ try{ await api(a,p); say('সংরক্ষণ হয়েছে।',true); setTimeout(()=>profile(id),600); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
     draw();
-    if(r.card_issued_at && (id===ME.employee_id || ME.can.sa)){ try{ cardRes=await api('cards.get',{ids:[id]}); showCard(); }catch(e){ const b=$('cardPv'); if(b) b.textContent=errText(e); } }
+    if(cardOpen && r.card_issued_at && (id===ME.employee_id || ME.can.sa)){ try{ cardRes=await api('cards.get',{ids:[id]}); showCard(); }catch(e){ const b=$('cardPv'); if(b) b.textContent=errText(e); } }
   }catch(e){ fail(e); }
 }
 const isAuthErr=e=>e.message==='NOT_LOGGED_IN'||String(e.message).startsWith('NOT_ALLOWED');
@@ -495,9 +501,9 @@ const CELL = {p:'প',in:'•',a:'অ',h:'ব',l:'ছু',w:'·',x:'?',f:'',na:'
 const TYPE_L = {IN:'Entry',OUT:'Exit'};
 const stChip = s => '<span class="st st-'+s+'">'+esc(ST[s]||'')+'</span>';
 
-function modal(html){
+function modal(html,wide){
   const bg=document.createElement('div'); bg.className='modalbg';
-  bg.innerHTML='<div class="modal" role="dialog" aria-modal="true">'+html+'</div>';
+  bg.innerHTML='<div class="modal" role="dialog" aria-modal="true"'+(wide?' style="max-width:min(980px,96vw)"':'')+'>'+html+'</div>';
   const close=()=>{ bg.remove(); document.removeEventListener('keydown',esc_); };
   const esc_=e=>{ if(e.key==='Escape') close(); };
   document.addEventListener('keydown',esc_);
@@ -508,10 +514,10 @@ const todayStr = () => new Date(Date.now()+6*3600*1000).toISOString().slice(0,10
 const nowHM = () => new Date(Date.now()+6*3600*1000).toISOString().slice(11,16);
 
 let ATT={tab:'',date:'',month:'',emp:'',people:null,names:null};
-const SC={on:false,stream:null,timer:0,busy:false,lastCode:'',until:0,video:null,cv:null};
+const SC={on:false,stream:null,timer:0,busy:false,lastCode:'',until:0,video:null,cv:null,gen:0};
 
 function stopCam(){
-  SC.on=false; clearTimeout(SC.timer);
+  SC.on=false; SC.gen++; clearTimeout(SC.timer);
   if(SC.stream){ SC.stream.getTracks().forEach(t=>t.stop()); SC.stream=null; }
 }
 
@@ -583,7 +589,7 @@ function editModal(ev,date,done){
   const m=modal('<h2 style="margin:0 0 4px;font-size:18px">রেকর্ড সংশোধন</h2><div class="muted" style="margin-bottom:10px">'+fmtD(date)+' · এখন: '+fmtT(ev.time)+' '+TYPE_L[ev.type]+'</div><div id="eMsg" role="alert" style="margin-bottom:8px"></div><div class="grid" style="grid-template-columns:1fr">'+
     '<div class="fld"><label for="e_time">সঠিক সময়</label><input id="e_time" type="time" value="'+ev.time+'"></div>'+
     '<div class="fld"><label for="e_type">ধরন</label>'+sel('e_type',[{v:'IN',t:'Entry (আসা)'},{v:'OUT',t:'Exit (যাওয়া)'}],ev.type,false)+'</div>'+
-    '<div class="fld"><label for="e_why">কারণ (বাধ্যতামূলক)</label><input id="e_why" type="text" maxlength="200"></div></div>'+
+    '<div class="fld"><label for="e_why">কারণ (সংশোধনে বাধ্যতামূলক, বাতিলে ঐচ্ছিক)</label><input id="e_why" type="text" maxlength="200"></div></div>'+
     '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="e_ok">সংশোধন সংরক্ষণ</button><button class="btn" id="e_void" style="border-color:#9B1C1C;color:#9B1C1C">রেকর্ডটি বাতিল করুন</button><button class="btn" id="e_no">বন্ধ করুন</button></div>');
   $('e_no').onclick=()=>m.close();
   const run=async(action,p)=>{
@@ -592,7 +598,7 @@ function editModal(ev,date,done){
     catch(e){ [$('e_ok'),$('e_void')].forEach(x=>x.disabled=false); if(isAuthErr(e)){ m.close(); fail(e); } else { $('eMsg').textContent=errText(e); $('eMsg').className='err'; } }
   };
   $('e_ok').onclick=()=>run('att.edit',{event_id:ev.id,time:$('e_time').value,type:$('e_type').value,reason:$('e_why').value});
-  $('e_void').onclick=()=>{ if(!$('e_why').value.trim()){ $('eMsg').textContent='বাতিলের কারণ লিখুন'; $('eMsg').className='err'; return; } if(confirm('এই রেকর্ড বাতিল করবেন? (মুছে যাবে না, বাতিল চিহ্ন থাকবে ও লগে লেখা থাকবে)')) run('att.void',{event_id:ev.id,reason:$('e_why').value}); };
+  $('e_void').onclick=()=>{ if(confirm('এই রেকর্ড বাতিল করবেন? (মুছে যাবে না, বাতিল চিহ্ন থাকবে ও লগে লেখা থাকবে)')) run('att.void',{event_id:ev.id,reason:$('e_why').value}); };
 }
 
 /* ---------- month view ---------- */
@@ -619,21 +625,41 @@ async function attMonth(){
 }
 
 /* ---------- QR scan ---------- */
+const camPref=()=>{ try{ return localStorage.getItem('rs_cam')==='user'?'user':'environment'; }catch(e){ return 'environment'; } };
+const camSet=v=>{ try{ localStorage.setItem('rs_cam',v); }catch(e){} };
+const camName=()=>camPref()==='user'?'সামনের ক্যামেরা':'পেছনের ক্যামেরা';
+function pauseCam(){
+  stopCam();
+  const v=$('scV'); if(v) v.srcObject=null;
+  const o=$('scOff'), f=$('scFrame'); if(o) o.classList.remove('hide'); if(f) f.classList.add('hide');
+}
 async function attScan(){
   const b=$('attBody');
-  b.innerHTML='<div class="card"><div class="scanbox"><video id="scV" playsinline muted></video><div class="frame"></div></div><div id="scSt" class="muted" style="text-align:center;margin-top:10px" role="status">ক্যামেরা চালু হচ্ছে...</div></div><div id="scRes"></div>';
+  b.innerHTML='<div class="card"><div class="scanbox"><video id="scV" playsinline muted></video><div class="frame" id="scFrame"></div><div id="scOff" class="scoff hide">ক্যামেরা বন্ধ আছে</div></div><div id="scSt" class="muted" style="text-align:center;margin-top:10px" role="status">ক্যামেরা চালু হচ্ছে...</div><div style="text-align:center;margin-top:10px"><button class="btn" id="scSwitch">সামনের / পেছনের ক্যামেরা বদলান</button></div></div><div id="scRes"></div>';
   if(typeof jsQR==='undefined'){ $('scSt').textContent='QR পড়ার অংশ লোড হয়নি। ইন্টারনেট দেখে পেজ রিফ্রেশ করুন।'; $('scSt').className='err'; return; }
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ $('scSt').textContent='এই ব্রাউজারে ক্যামেরা চলে না। Chrome বা Safari-তে খুলুন।'; $('scSt').className='err'; return; }
+  $('scSwitch').onclick=()=>{ camSet(camPref()==='user'?'environment':'user'); camStart(); };
+  await camStart();
+}
+async function camStart(){
+  stopCam();
+  const g=++SC.gen, st=$('scSt'); if(!st) return;
+  st.className='muted'; st.textContent=camName()+' চালু হচ্ছে...';
+  let stream;
   try{
-    SC.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:camPref()},width:{ideal:1280},height:{ideal:720}},audio:false});
   }catch(e){
-    $('scSt').className='err';
-    $('scSt').textContent=(e&&e.name==='NotAllowedError')?'ক্যামেরার অনুমতি দেওয়া হয়নি। ব্রাউজারের ঠিকানার পাশের তালা চিহ্নে চেপে ক্যামেরা "Allow" করুন, তারপর রিফ্রেশ করুন।':(e&&e.name==='NotFoundError')?'কোনো ক্যামেরা পাওয়া যায়নি।':'ক্যামেরা চালু করা যায়নি: '+esc(e&&e.message||e);
+    if(g!==SC.gen||!$('scSt')) return;
+    st.className='err';
+    st.textContent=(e&&e.name==='NotAllowedError')?'ক্যামেরার অনুমতি দেওয়া হয়নি। ব্রাউজারের ঠিকানার পাশের তালা চিহ্নে চেপে ক্যামেরা "Allow" করুন, তারপর রিফ্রেশ করুন।':(e&&e.name==='NotFoundError')?'কোনো ক্যামেরা পাওয়া যায়নি।':'ক্যামেরা চালু করা যায়নি: '+(e&&e.message||e);
     return;
   }
-  SC.video=$('scV'); SC.video.srcObject=SC.stream; await SC.video.play().catch(()=>{});
-  SC.cv=document.createElement('canvas'); SC.on=true; SC.busy=false;
-  $('scSt').textContent='কার্ডের QR ফ্রেমের ভেতরে ধরুন';
+  if(g!==SC.gen||!$('scV')){ stream.getTracks().forEach(t=>t.stop()); return; }   // page changed while the camera was starting
+  SC.stream=stream; SC.video=$('scV'); SC.video.srcObject=stream; await SC.video.play().catch(()=>{});
+  if(g!==SC.gen) return;   // page or camera changed meanwhile; stopCam already released the stream
+  SC.cv=SC.cv||document.createElement('canvas'); SC.on=true; SC.busy=false;
+  const o=$('scOff'), f=$('scFrame'); if(o) o.classList.add('hide'); if(f) f.classList.remove('hide');
+  st.textContent=camName()+' · কার্ডের QR ফ্রেমের ভেতরে ধরুন';
   scanLoop();
 }
 function scanLoop(){
@@ -648,11 +674,13 @@ function scanLoop(){
   }
   SC.timer=setTimeout(scanLoop,150);
 }
-function scanResume(){ SC.busy=false; const r=$('scRes'); if(r) r.innerHTML=''; const s=$('scSt'); if(s){ s.className='muted'; s.textContent='কার্ডের QR ফ্রেমের ভেতরে ধরুন'; } }
+// After a result is handled, the camera opens again for the next scan
+function scanResume(){ SC.busy=false; const r=$('scRes'); if(r) r.innerHTML=''; if($('scV')) camStart(); }
 function scanShow(html){ const r=$('scRes'); if(r) r.innerHTML=html; }
 async function onScanned(code){
   SC.busy=true; SC.lastCode=code; SC.until=Date.now()+4000;
   if(navigator.vibrate) navigator.vibrate(60);
+  pauseCam();
   try{
     const e=await api('att.lookup',{qr:code});
     const avatar=e.photo?'<img src="'+e.photo+'" alt="">':esc((e.name_bn||'?').trim().charAt(0));
@@ -694,6 +722,18 @@ async function scanRecord(code,e,type,force){
 }
 const A_manual=()=>!!(ME&&ME.can&&ME.can.att&&ME.can.att.manual);
 
+function zoomCard(cc){
+  let w=380; const MIN=160, MAX=1100;
+  const m=modal('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><b style="flex:1;min-width:120px">আইডি কার্ড (সামনে ও পেছনে)</b><button class="btn" id="zOut" aria-label="ছোট করুন">−</button><button class="btn" id="zIn" aria-label="বড় করুন">+</button><button class="btn" id="zRe">মূল আকার</button><button class="btn" id="zX">বন্ধ</button></div><div id="zBox" style="overflow:auto;max-height:75vh;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:flex-start;padding:4px"></div><div class="muted" id="zInfo" style="margin-top:8px;text-align:center"></div>',true);
+  const cl=[cc.front,cc.back].map(c=>{ const n=document.createElement('canvas'); n.width=c.width; n.height=c.height; n.getContext('2d').drawImage(c,0,0); n.style.cssText='height:auto;max-width:none;border-radius:14px;box-shadow:0 4px 16px rgba(15,31,77,.25)'; return n; });
+  $('zBox').append(cl[0],cl[1]);
+  const apply=()=>{ cl.forEach(n=>n.style.width=w+'px'); $('zInfo').textContent='আকার: '+bnd(Math.round(w/216*100))+'%'; };
+  $('zIn').onclick=()=>{ w=Math.min(MAX,Math.round(w*1.25)); apply(); };
+  $('zOut').onclick=()=>{ w=Math.max(MIN,Math.round(w/1.25)); apply(); };
+  $('zRe').onclick=()=>{ w=380; apply(); };
+  $('zX').onclick=()=>m.close();
+  apply();
+}
 function fail(e){
   if(e.message==='NOT_LOGGED_IN'||String(e.message).startsWith('NOT_ALLOWED')){ logout(); return; }
   $('view').innerHTML='<p class="err">'+(e.message==='NOT_PERMITTED'?'এই তথ্য দেখার অনুমতি আপনার নেই।':'সমস্যা: '+esc(e.message))+'</p>';
