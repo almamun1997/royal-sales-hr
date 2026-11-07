@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="idcard.js"></script>
+<script src="payslip.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--blue:#283891;--navy:#0F1F4D;--orange:#F15A29;--ink:#0F172A;--mute:#5B6577;--line:#E3E7EF;--bg:#F4F6FA}
@@ -163,7 +164,7 @@ async function start(){
     $('meName').textContent = ME.name || ME.email;
     $('meRole').textContent = (ROLE[ME.role] || ME.role)+(ME.can.delegate?' · সুপার অ্যাডমিন ক্ষমতাসহ':'');
     $('navUsers').classList.toggle('hide', !ME.can.sa);
-    $('navPay').classList.toggle('hide', !(ME.can.sa||ME.role==='Owner'));
+    $('navPay').classList.remove('hide'); $('navPay').textContent=(ME.can.sa||ME.role==='Owner')?'বেতন':'আমার পে স্লিপ';
     $('navDes').classList.toggle('hide', !ME.can.sa);
     $('navCards').classList.toggle('hide', !ME.can.sa);
     $('navCo').classList.toggle('hide', !ME.can.sa);
@@ -544,11 +545,13 @@ async function usersPage(){
  * Payroll (Phase 8, steps a and b): monthly sheet, absence deductions, mid-month salary choice
  * ===================================================================== */
 const digitsEn = s => String(s).replace(/[০-৯]/g,c=>'০১২৩৪৫৬৭৮৯'.indexOf(c)).replace(/,/g,'').trim();
+const mk = n => '৳ '+bnd(Number(n).toLocaleString('en-US',{maximumFractionDigits:2}));
 const PAYS={ month:'', shown:false, data:null };
 const pm = n => (n===null||n===undefined) ? '—' : (PAYS.shown ? '৳ '+bnd(Number(n).toLocaleString('en-US',{maximumFractionDigits:2,useGrouping:true})) : MASK);
 const pmLabel = m => MONTHS[+m.slice(5,7)-1]+' '+bnd(m.slice(0,4));
 const pmShift = (m,n) => { const d=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1+n,1)); return d.toISOString().slice(0,7); };
 async function payrollPage(){
+  if(!(ME.can.sa||ME.role==='Owner')) return mySlipPage();
   const v=$('view');
   if(!PAYS.month){ const t=todayStr(); PAYS.month = +t.slice(8,10)>=1 ? pmShift(t.slice(0,7),-1) : t.slice(0,7); }
   v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
@@ -562,18 +565,19 @@ function payDraw(){
   const flag=r=>(r.locked?'<span class="chip'+(PST[r.pay_status][1]?' o':'')+'">'+PST[r.pay_status][0]+'</span> ':'')+(r.needs_choice?'<span class="chip o">বেতন-বদলের পছন্দ বাকি</span> ':'')+(r.partial?'<span class="chip o">আংশিক মাস</span> ':'')+(r.deduct_days?'<span class="chip o">কর্তন '+bnd(r.deduct_days)+' দিন</span> ':'');
   v.innerHTML='<h1 class="t">বেতন</h1><div class="sub">মাস বেছে সবার বেতনের হিসাব দেখুন। পূর্ণ মাস কাজ করলে পূর্ণ বেতন, আংশিক মাসে বেতন ÷ ৩০ × দিন। অনুপস্থিত দিনে কর্তন না বসালে বেতন কাটা যায় না।</div>'+
     '<div id="pMsg" role="alert"></div>'+
-    '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="pPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(D.month))+'</b><button class="btn" id="pNext" aria-label="পরের মাস"'+(D.month>=cur?' disabled':'')+'>›</button>'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span></div>'+
+    '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="pPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(D.month))+'</b><button class="btn" id="pNext" aria-label="পরের মাস"'+(D.month>=cur?' disabled':'')+'>›</button>'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span>'+(D.totals.locked?'<button class="btn" id="pAllSlip" style="margin-left:auto">সব পে স্লিপ (PDF)</button>':'')+'</div>'+
     (D.month_over?'':'<div class="muted" style="margin-bottom:12px">⚠ মাস এখনও শেষ হয়নি। বাকি দিনগুলোও ধরে সাময়িক হিসাব দেখানো হচ্ছে।</div>')+
     (D.totals.pending?'<div class="err" style="margin-bottom:12px" role="alert">'+bnd(D.totals.pending)+' জনের বেতন এই মাসে বদলেছে। সুপার অ্যাডমিনকে হিসাবের উপায় বেছে নিতে হবে।</div>':'')+
     (D.can_edit&&D.totals.open>0?'<div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn pri" id="pFin"'+((!D.month_over||D.totals.pending)?' disabled':'')+'>এই মাসের হিসাব চূড়ান্ত করুন ('+bnd(D.totals.open)+' জন)</button><span class="muted">'+(!D.month_over?'মাস শেষ হলে চূড়ান্ত করা যাবে।':D.totals.pending?'আগে বেতন-বদলের উপায় বাছাই করুন।':'চূড়ান্ত হলে অঙ্ক আর বদলাবে না। পরে ভুল পেলে কারণ লিখে খোলা যাবে।')+'</span></div>':'')+
     '<div class="tw"><table><thead><tr><th>নাম</th><th>কাজের দিন</th><th>মাসিক বেতন</th><th>মোট</th><th>কর্তন</th><th>প্রদেয়</th><th>পরিশোধিত</th><th>বাকি</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
     (D.rows.length?D.rows.map(r=>'<tr><td style="font-weight:600">'+esc(r.name_bn)+'<div class="muted" style="font-weight:400">'+esc(r.designation)+'</div></td><td>'+bnd(r.days_worked)+' / '+bnd(r.partial?r.employed_days:30)+'</td><td>'+(r.monthly_salary===null?'<span class="muted">মিশ্র</span>':pm(r.monthly_salary))+'</td><td>'+pm(r.gross)+'</td><td>'+(r.deduction?pm(r.deduction):'—')+'</td><td style="font-weight:700">'+pm(r.net)+'</td><td>'+(r.locked?pm(r.paid):'—')+'</td><td>'+(r.locked?(r.due?'<b>'+pm(r.due)+'</b>':'—'):'—')+'</td><td>'+flag(r)+'</td><td><button class="btn" data-pd="'+esc(r.employee_id)+'">বিস্তারিত</button></td></tr>').join(''):'<tr><td colspan="10" class="muted">এই মাসে কোনো কর্মচারী ছিলেন না।</td></tr>')+
     '</tbody>'+(D.rows.length?'<tfoot><tr><td colspan="3" style="font-weight:700">মোট</td><td style="font-weight:700">'+pm(D.totals.gross)+'</td><td style="font-weight:700">'+(D.totals.deduction?pm(D.totals.deduction):'—')+'</td><td style="font-weight:700">'+pm(D.totals.net)+'</td><td style="font-weight:700">'+(D.totals.locked?pm(D.totals.paid):'—')+'</td><td style="font-weight:700">'+(D.totals.locked&&D.totals.due?pm(D.totals.due):'—')+'</td><td colspan="2"></td></tr></tfoot>':'')+'</table></div>'+
-    '<div class="muted" style="margin-top:12px">অঙ্ক দশমিকের পর ২ ঘর পর্যন্ত দেখানো হয়, ভেতরের হিসাব পুরো সূক্ষ্ম থাকে। পে স্লিপ PDF পরের ধাপে আসবে।</div></div>';
+    '<div class="muted" style="margin-top:12px">অঙ্ক দশমিকের পর ২ ঘর পর্যন্ত দেখানো হয়, ভেতরের হিসাব পুরো সূক্ষ্ম থাকে। পরের ধাপে হিসাব চূড়ান্ত করা, কিস্তিতে পরিশোধ ও পে স্লিপ আসবে।</div></div>';
   $('pPrev').onclick=()=>{ PAYS.month=pmShift(PAYS.month,-1); payrollPage(); };
   $('pNext').onclick=()=>{ PAYS.month=pmShift(PAYS.month,1); payrollPage(); };
   v.querySelector('[data-eye="pay"]').onclick=()=>{ PAYS.shown=!PAYS.shown; if(PAYS.shown) autoHide(()=>{ PAYS.shown=false; if(location.hash==='#/payroll'&&PAYS.data) payDraw(); }); payDraw(); };
   v.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>payDetail(b.dataset.pd));
+  const as=$('pAllSlip'); if(as) as.onclick=()=>payslipPreview(null,D.month);
   const fb=$('pFin'); if(fb) fb.onclick=async()=>{
     if(!confirm(pmLabel(D.month)+' মাসের '+bnd(D.totals.open)+' জনের বেতনের হিসাব চূড়ান্ত করবেন?\n\nচূড়ান্ত হলে কর্তন, বেতন-বদলের উপায় ও অঙ্ক আর বদলানো যাবে না (কারণ লিখে খোলা যাবে)।')) return;
     fb.disabled=true;
@@ -595,6 +599,7 @@ function payDetail(id){
     (r.locked?'<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3 style="margin-top:0">পরিশোধ <span class="chip'+(r.pay_status==='Paid'?'':' o')+'">'+(r.pay_status==='Paid'?'পরিশোধিত':r.pay_status==='Partly'?'আংশিক পরিশোধ':'পরিশোধ বাকি')+'</span></h3>'+
       '<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:8px"><div><div class="muted">প্রদেয়</div><b>'+pm(r.net)+'</b></div><div><div class="muted">পরিশোধিত</div><b>'+pm(r.paid)+'</b></div><div><div class="muted">বাকি</div><b>'+(r.due?pm(r.due):'—')+'</b></div></div>'+
       (r.payments.length?'<div class="tw"><table><thead><tr><th>তারিখ</th><th>টাকা</th><th>নোট</th><th></th></tr></thead><tbody>'+r.payments.map(x=>'<tr'+(x.void?' style="opacity:.55;text-decoration:line-through"':'')+'><td>'+esc(fmtD(x.date))+'</td><td>'+pm(x.amount)+'</td><td>'+esc(x.note||'')+'</td><td>'+(x.void?'<span class="chip o">বাতিল</span>':(pe?'<button class="btn" data-vp="'+esc(x.id)+'">বাতিল করুন</button>':''))+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">এখনও কোনো পরিশোধ নথিভুক্ত হয়নি।</p>')+
+      '<div style="margin:6px 0 10px"><button class="btn" id="pSlip">পে স্লিপ দেখুন ও PDF নামান</button></div>'+
       (pe&&r.due?'<div class="grid" style="margin-top:10px"><div class="fld"><label for="pp_d">তারিখ</label><input id="pp_d" type="date" value="'+(todayStr()<r.month+'-01'?r.month+'-01':todayStr())+'" max="'+todayStr()+'" min="'+r.month+'-01"></div><div class="fld"><label for="pp_a">টাকা</label><input id="pp_a" type="text" inputmode="decimal" autocomplete="off"></div><div class="fld"><label for="pp_n">নোট (ঐচ্ছিক)</label><input id="pp_n" type="text" maxlength="200"></div></div><div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="pp_full">পুরো বাকি টাকা</button><button class="btn pri" id="pp_go">পরিশোধ নথিভুক্ত করুন</button></div>':'')+
       (pe&&!r.paid?'<div style="margin-top:12px"><button class="btn" id="pRe" style="border-color:#9B1C1C;color:#9B1C1C">চূড়ান্ত হিসাব খুলুন</button></div>':'')+'</div>':'')+
     '<h3>অনুপস্থিত দিন ও কর্তন</h3>'+
@@ -606,11 +611,40 @@ function payDetail(id){
   const err=e=>{ if(isAuthErr(e)) fail(e); else { const b=$('mMsg'); if(b){ b.textContent=errText(e); b.className='err'; } } };
   const sm=$('pmSet'); if(sm) sm.onclick=async()=>{ const c=m.querySelector('input[name=pmode]:checked'); if(!c){ $('mMsg').textContent='একটি উপায় বাছাই করুন'; $('mMsg').className='err'; return; } try{ await api('payroll.setMode',{month:r.month,employee_id:id,mode:c.value}); await reload(); }catch(e){ err(e); } };
   const dg=$('dGo2'); if(dg) dg.onclick=async()=>{ const ds=[...m.querySelectorAll('[data-ad]:checked')].map(x=>x.dataset.ad); try{ await api('payroll.deduct',{month:r.month,employee_id:id,dates:ds,note:$('dn').value}); await reload(); }catch(e){ err(e); } };
+  const sl=$('pSlip'); if(sl) sl.onclick=()=>payslipPreview([id],r.month);
   const pg=$('pp_go'); if(pg) pg.onclick=async()=>{ try{ await api('payroll.pay',{payroll_id:r.payroll_id,date:$('pp_d').value,amount:digitsEn($('pp_a').value),note:$('pp_n').value}); await reload(); }catch(e){ err(e); } };
   const pf=$('pp_full'); if(pf) pf.onclick=()=>{ $('pp_a').value=String(r.due); };
   m.querySelectorAll('[data-vp]').forEach(b=>b.onclick=async()=>{ const why=prompt('পরিশোধ বাতিলের কারণ লিখুন'); if(why===null) return; try{ await api('payroll.voidPay',{payment_id:b.dataset.vp,reason:why}); await reload(); }catch(e){ err(e); } });
   const re=$('pRe'); if(re) re.onclick=async()=>{ const why=prompt('হিসাব খোলার কারণ লিখুন (আবশ্যক)'); if(why===null) return; try{ await api('payroll.reopen',{payroll_id:r.payroll_id,reason:why}); await reload(); }catch(e){ err(e); } };
   m.querySelectorAll('[data-ud]').forEach(b=>b.onclick=async()=>{ if(!confirm('এই কর্তন তুলে নেবেন?')) return; try{ await api('payroll.undeduct',{ded_id:b.dataset.ud}); await reload(); }catch(e){ err(e); } });
+}
+
+/* ---- payslips: preview, then download the PDF ---- */
+async function payslipPreview(ids,month){
+  try{
+    const D=await api('payroll.slips',{month:month,employee_ids:ids||undefined});
+    if(!D.rows.length){ alert('এই মাসের পে স্লিপ এখনও তৈরি হয়নি। হিসাব চূড়ান্ত হলে পাওয়া যাবে।'); return; }
+    const cans=[]; for(const s of D.rows) cans.push(await PAYSLIP.render(s,D.company,'logo.png'));
+    const m=modal('<h2 style="margin-top:0">পে স্লিপ — '+esc(pmLabel(month))+'</h2><p class="muted">'+bnd(cans.length)+'টি পে স্লিপ। নিচে দেখে নিয়ে PDF নামান (A4, প্রতি পাতায় একটি)।</p><div id="psBox" style="max-height:62vh;overflow:auto;background:#EEF1F7;padding:12px;border-radius:12px;display:grid;gap:12px;justify-items:center"></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
+    const box=m.querySelector('#psBox');
+    cans.forEach(c=>{ c.style.cssText='width:min(100%,560px);height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)'; box.append(c); });
+    $('psClose').onclick=()=>m.close();
+    $('psPdf').onclick=()=>{ PAYSLIP.pdf(cans, D.rows.length===1 ? 'payslip_'+D.rows[0].employee_id+'_'+month+'.pdf' : 'payslips_'+month+'.pdf'); };
+  }catch(e){ if(isAuthErr(e)) fail(e); else alert(errText(e)); }
+}
+/* ---- everyone else: only their own payslip ---- */
+async function mySlipPage(){
+  const v=$('view'), cur=todayStr().slice(0,7);
+  if(!PAYS.month) PAYS.month=pmShift(cur,-1);
+  v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const D=await api('payroll.slips',{month:PAYS.month}), s=D.rows[0];
+    v.innerHTML='<h1 class="t">আমার পে স্লিপ</h1><div class="sub">মাস বেছে আপনার পে স্লিপ দেখুন ও PDF নামান। হিসাব চূড়ান্ত হওয়ার পর পে স্লিপ পাওয়া যায়।</div><div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="mPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(PAYS.month))+'</b><button class="btn" id="mNext" aria-label="পরের মাস"'+(PAYS.month>=cur?' disabled':'')+'>›</button></div>'+
+      (s?'<div style="display:flex;gap:28px;flex-wrap:wrap;margin:6px 0 14px"><div><div class="muted">প্রদেয় বেতন</div><b>'+esc(mk(s.net))+'</b></div><div><div class="muted">পরিশোধিত</div><b>'+esc(mk(s.paid))+'</b></div><div><div class="muted">বাকি</div><b>'+(s.due?esc(mk(s.due)):'—')+'</b></div></div><button class="btn pri" id="mSlip">পে স্লিপ দেখুন ও PDF নামান</button>':'<p class="muted">এই মাসের পে স্লিপ এখনও তৈরি হয়নি।</p>')+'</div>';
+    $('mPrev').onclick=()=>{ PAYS.month=pmShift(PAYS.month,-1); mySlipPage(); };
+    $('mNext').onclick=()=>{ PAYS.month=pmShift(PAYS.month,1); mySlipPage(); };
+    const b=$('mSlip'); if(b) b.onclick=()=>payslipPreview(null,PAYS.month);
+  }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">আমার পে স্লিপ</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
 }
 /* =====================================================================
  * Attendance (Phase 7, steps a and b): scan, day list, month view, manual entries
