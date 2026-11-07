@@ -5,6 +5,7 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="idcard.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -67,6 +68,26 @@ nav a.on{box-shadow:0 2px 10px rgba(241,90,41,.35)}
 tbody tr:hover{background:#F7F9FD}
 .fld input:focus,.fld select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(40,56,145,.15)}
 .eye svg{transition:transform .15s ease}.eye:hover svg{transform:scale(1.15)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab{min-height:44px;padding:0 20px;border:1px solid #CBD3E1;border-radius:10px;background:#fff;color:var(--ink);font:600 14px 'Noto Sans Bengali','Inter',sans-serif;transition:background-color .18s ease,color .18s ease}
+.tab:hover{background:#EEF1F6}.tab.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.st{display:inline-block;font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;background:#EEF1F6;color:#4B5563}
+.st-p{background:#E3F5EA;color:#0F6B3E}.st-in{background:#DDE6FF;color:#1B2E9A}.st-a{background:#FDE2E2;color:#9B1C1C}.st-h{background:#EEF1F6;color:#4B5563}.st-l{background:#EFE3FA;color:#6B2FA0}.st-w{background:#EEF1F6;color:#5B6577}.st-x{background:#FFF3C4;color:#7A5B00}
+.sumrow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}.sumrow div{flex:1 1 110px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;color:var(--mute);font-size:13px}.sumrow b{display:block;font-size:26px;color:var(--ink)}
+.mx th,.mx td{padding:3px;text-align:center;font-size:12px}
+.cell{display:inline-block;width:28px;height:28px;line-height:28px;border-radius:7px;font:600 12px 'Noto Sans Bengali',sans-serif;border:0;padding:0;text-align:center;font-style:normal}
+button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
+.cell.mis{box-shadow:0 0 0 2px var(--orange)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:13px;color:var(--mute)}.legend span{display:flex;align-items:center;gap:6px}
+.scanbox{position:relative;max-width:460px;margin:0 auto;border-radius:14px;overflow:hidden;background:#0b1020;min-height:240px}
+.scanbox video{width:100%;display:block;max-height:60vh;object-fit:cover}
+.scanbox .frame{position:absolute;inset:16% 18%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.35);pointer-events:none}
+.bigbtn{flex:1;min-height:68px;border:0;border-radius:14px;font:700 22px 'Noto Sans Bengali','Inter',sans-serif;transition:transform .15s ease,box-shadow .2s ease}
+.bigbtn:hover{box-shadow:0 4px 16px rgba(0,0,0,.2);transform:translateY(-1px)}.bigbtn:active{transform:scale(.97)}
+.bigbtn.in{background:#0F8A4B;color:#fff}.bigbtn.out{background:var(--orange);color:var(--ink)}
+.okcard{border-color:#0F8A4B;background:#F0FAF4;color:#0F6B3E}
+.modalbg{position:fixed;inset:0;background:rgba(15,31,77,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal{background:#fff;border-radius:14px;padding:20px;max-width:440px;width:100%;max-height:92vh;overflow:auto}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 #view.enter{animation:fadeUp .3s ease}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -86,7 +107,7 @@ tbody tr:hover{background:#F7F9FD}
 <div id="app" class="hide">
   <nav aria-label="প্রধান মেনু">
     <div class="brand"><div class="lg"><img src="logo.png" alt="" onerror="this.style.display='none'"></div><div><b>Royal Sales</b><small>HR ও বেতন ব্যবস্থাপনা</small></div></div>
-    <a class="soon" href="#">ড্যাশবোর্ড</a><a class="soon" href="#">হাজিরা</a>
+    <a class="soon" href="#">ড্যাশবোর্ড</a><a id="navAtt" href="#/attendance">হাজিরা</a>
     <a id="navEmp" href="#/employees">কর্মচারী</a>
     <a class="soon" href="#">ছুটি</a><a class="soon" href="#">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
@@ -178,11 +199,12 @@ const MASK='৳ ••••••';
 let hideTimer=null;
 function autoHide(fn){ clearTimeout(hideTimer); hideTimer=setTimeout(fn,60000); }
 function route(){
-  clearTimeout(hideTimer);
+  clearTimeout(hideTimer); stopCam();
   const h = location.hash || '#/employees';
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
   const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
+  if(h==='#/attendance'){ $('navAtt').classList.add('on'); attendancePage(); return; }
   if(h==='#/cards'){ $('navCards').classList.add('on'); cardsPage(); return; }
   if(h==='#/company'){ $('navCo').classList.add('on'); companyPage(); return; }
   if(h==='#/designations'){ $('navDes').classList.add('on'); designationsPage(); return; }
@@ -458,6 +480,220 @@ async function usersPage(){
     });
   }catch(e){ fail(e); }
 }
+/* =====================================================================
+ * Attendance (Phase 7, steps a and b): scan, day list, month view, manual entries
+ * ===================================================================== */
+const bnd = s => String(s).replace(/\d/g, d => '০১২৩৪৫৬৭৮৯'[d]);
+const MONTHS = ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'];
+const WDAYS = ['রবিবার','সোমবার','মঙ্গলবার','বুধবার','বৃহস্পতিবার','শুক্রবার','শনিবার'];
+function fmtT(t){ if(!t) return '—'; const a=t.split(':').map(Number), h=a[0], m=a[1]; const p=h<4?'রাত':h<12?'সকাল':h<16?'দুপুর':h<18?'বিকাল':h<20?'সন্ধ্যা':'রাত'; return p+' '+bnd((h%12||12)+':'+('0'+m).slice(-2)); }
+function fmtD(d){ const x=new Date(Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))); return bnd(+d.slice(8,10))+' '+MONTHS[+d.slice(5,7)-1]+' '+bnd(d.slice(0,4))+' ('+WDAYS[x.getUTCDay()]+')'; }
+function fmtH(h){ const m=Math.round(h*60); if(!m) return '—'; const hh=Math.floor(m/60), mm=m%60; return (hh?bnd(hh)+' ঘণ্টা ':'')+(mm?bnd(mm)+' মিনিট':'').trim(); }
+function addDays(d,n){ const x=new Date(Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))+n*86400000); return x.toISOString().slice(0,10); }
+const ST = {p:'উপস্থিত',in:'কাজে আছেন',a:'অনুপস্থিত',h:'ছুটির দিন',l:'ছুটি',w:'এখনও আসেননি',x:'শুধু Exit আছে',f:'',na:''};
+const CELL = {p:'প',in:'•',a:'অ',h:'ব',l:'ছু',w:'·',x:'?',f:'',na:'—'};
+const TYPE_L = {IN:'Entry',OUT:'Exit'};
+const stChip = s => '<span class="st st-'+s+'">'+esc(ST[s]||'')+'</span>';
+
+function modal(html){
+  const bg=document.createElement('div'); bg.className='modalbg';
+  bg.innerHTML='<div class="modal" role="dialog" aria-modal="true">'+html+'</div>';
+  const close=()=>{ bg.remove(); document.removeEventListener('keydown',esc_); };
+  const esc_=e=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown',esc_);
+  bg.addEventListener('mousedown',e=>{ if(e.target===bg) close(); });
+  document.body.appendChild(bg); bg.close=close; return bg;
+}
+const todayStr = () => new Date(Date.now()+6*3600*1000).toISOString().slice(0,10);   // Bangladesh date (UTC+6)
+const nowHM = () => new Date(Date.now()+6*3600*1000).toISOString().slice(11,16);
+
+let ATT={tab:'',date:'',month:'',emp:'',people:null,names:null};
+const SC={on:false,stream:null,timer:0,busy:false,lastCode:'',until:0,video:null,cv:null};
+
+function stopCam(){
+  SC.on=false; clearTimeout(SC.timer);
+  if(SC.stream){ SC.stream.getTracks().forEach(t=>t.stop()); SC.stream=null; }
+}
+
+async function attendancePage(){
+  const v=$('view'), A=ME.can.att;
+  const tabs=[]; if(A.scan) tabs.push(['scan','স্ক্যান']);
+  tabs.push(['day',A.scope==='self'?'আমার হাজিরা':'দিনের হাজিরা']);
+  if(A.scope!=='today') tabs.push(['month','মাসিক']);
+  if(!ATT.tab||!tabs.some(t=>t[0]===ATT.tab)) ATT.tab=tabs[0][0];
+  v.innerHTML='<h1 class="t">'+(A.scope==='self'&&!A.scan?'আমার হাজিরা':'হাজিরা')+'</h1><div class="sub">'+(A.scan?'কর্মচারীর কার্ডের QR স্ক্যান করে Entry বা Exit নিন।':'আপনার হাজিরার তথ্য এখানে দেখা যাবে।')+'</div>'+
+    '<div id="msg" role="alert" style="margin-bottom:12px"></div><div class="tabs" role="tablist">'+tabs.map(t=>'<button class="tab'+(t[0]===ATT.tab?' on':'')+'" role="tab" data-tab="'+t[0]+'">'+t[1]+'</button>').join('')+'</div><div id="attBody"></div>';
+  v.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ ATT.tab=b.dataset.tab; attendancePage(); });
+  stopCam();
+  try{
+    if(ATT.tab==='scan') await attScan(); else if(ATT.tab==='month') await attMonth(); else await attDay();
+  }catch(e){ if(isAuthErr(e)) fail(e); else $('attBody').innerHTML='<p class="err">'+esc(errText(e))+'</p>'; }
+}
+
+/* ---------- day list ---------- */
+async function attDay(){
+  const A=ME.can.att, b=$('attBody');
+  b.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  const d=await api('att.day',{date:ATT.date||''}); ATT.date=d.date;
+  const cnt={p:0,a:0,l:0,h:0,m:0};
+  d.rows.forEach(r=>{ if(r.s==='p'||r.s==='in') cnt.p++; else if(r.s==='a') cnt.a++; else if(r.s==='l') cnt.l++; else if(r.s==='h') cnt.h++; if(r.missing_exit) cnt.m++; });
+  const dateCtl = d.scope==='today' ? '<b>'+fmtD(d.date)+'</b>' :
+    '<button class="btn" id="dPrev" aria-label="আগের দিন">‹</button> <input type="date" id="dDate" value="'+d.date+'" max="'+d.today+'" style="min-height:44px;padding:0 10px;border:1px solid #CBD3E1;border-radius:10px;font-family:inherit"> <button class="btn" id="dNext" aria-label="পরের দিন"'+(d.date>=d.today?' disabled':'')+'>›</button> <button class="btn" id="dToday">আজ</button>';
+  b.innerHTML='<div class="card"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+dateCtl+'</div>'+
+    (A.manual?'<button class="btn pri" id="dManual">হাতে Entry/Exit যোগ করুন</button>':'')+'</div>'+
+    '<div class="muted" style="margin-top:8px">'+fmtD(d.date)+'</div></div>'+
+    (d.scope==='self'?'':'<div class="sumrow"><div><b>'+bnd(cnt.p)+'</b>উপস্থিত</div><div><b>'+bnd(cnt.a)+'</b>অনুপস্থিত</div><div><b>'+bnd(cnt.l)+'</b>ছুটি</div><div><b>'+bnd(cnt.h)+'</b>ছুটির দিন</div><div><b>'+bnd(cnt.m)+'</b>Exit নেই</div></div>')+
+    '<div class="card"><div class="tw"><table><thead><tr><th>কর্মচারী</th><th>অবস্থা</th><th>প্রথম Entry</th><th>শেষ Exit</th><th>মোট সময়</th><th></th></tr></thead><tbody>'+
+    (d.rows.length?d.rows.map((r,i)=>'<tr><td style="font-weight:600">'+esc(r.name_bn)+'<div class="muted" style="font-weight:400">'+esc(r.designation)+'</div></td><td>'+stChip(r.s)+(r.missing_exit?' <span class="st st-x">Exit নেই</span>':'')+(r.note?' <span class="muted">'+esc(r.note)+'</span>':'')+'</td><td>'+fmtT(r.first_in)+'</td><td>'+fmtT(r.last_out)+'</td><td>'+fmtH(r.hours)+'</td><td><button class="btn" data-ex="'+i+'" aria-expanded="false">বিস্তারিত</button></td></tr><tr class="hide" id="ex'+i+'"><td colspan="6" style="background:#F7F9FD">'+evList(r,d)+'</td></tr>').join(''):'<tr><td colspan="6" class="muted">এই দিনের কোনো কর্মচারী নেই।</td></tr>')+
+    '</tbody></table></div></div>';
+  const go=dt=>{ ATT.date=dt; attDay().catch(e=>{ if(isAuthErr(e)) fail(e); else say(errText(e)); }); };
+  if($('dDate')){ $('dDate').onchange=()=>{ if($('dDate').value) go($('dDate').value); }; $('dPrev').onclick=()=>go(addDays(d.date,-1)); $('dNext').onclick=()=>go(addDays(d.date,1)); $('dToday').onclick=()=>go(d.today); }
+  if($('dManual')) $('dManual').onclick=()=>manualModal({date:d.date},()=>attDay());
+  b.querySelectorAll('[data-ex]').forEach(x=>x.onclick=()=>{ const row=$('ex'+x.dataset.ex); const open=row.classList.toggle('hide'); x.setAttribute('aria-expanded',String(!open)); });
+  b.querySelectorAll('[data-add]').forEach(x=>x.onclick=()=>manualModal({date:d.date,employee_id:x.dataset.add},()=>attDay()));
+  b.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>{ const [i,j]=x.dataset.edit.split('.').map(Number); editModal(d.rows[i].ev[j],d.date,()=>attDay()); });
+}
+function evList(r,d){
+  const A=ME.can.att;
+  const list=r.ev.length?'<table style="min-width:0"><thead><tr><th>সময়</th><th>ধরন</th><th>কীভাবে</th><th>কে নিলেন</th><th>কারণ</th><th></th></tr></thead><tbody>'+
+    r.ev.map((e,j)=>'<tr><td>'+fmtT(e.time)+'</td><td><span class="st '+(e.type==='IN'?'st-p':'st-h')+'">'+TYPE_L[e.type]+'</span></td><td>'+(e.method==='QR'?'QR স্ক্যান':'হাতে')+(e.edited?' (সংশোধিত)':'')+'</td><td>'+esc(e.by)+'</td><td>'+esc(e.reason)+'</td><td>'+(A.manual?'<button class="btn" data-edit="'+d.rows.indexOf(r)+'.'+j+'">সংশোধন / বাতিল</button>':'')+'</td></tr>').join('')+'</tbody></table>'
+    :'<span class="muted">এই দিনে কোনো Entry/Exit নেই।</span>';
+  return list+(A.manual?'<div style="margin-top:10px"><button class="btn" data-add="'+esc(r.employee_id)+'">+ এই কর্মচারীর হাতে যোগ করুন</button></div>':'');
+}
+
+/* ---------- manual add / edit / void ---------- */
+async function manualModal(pref,done){
+  try{ if(!ATT.people) ATT.people=await api('att.people'); }catch(e){ say(errText(e)); return; }
+  const today=todayStr(), date=pref.date||today;
+  const m=modal('<h2 style="margin:0 0 12px;font-size:18px">হাতে Entry/Exit যোগ করুন</h2><div id="mMsg" role="alert" style="margin-bottom:8px"></div><div class="grid" style="grid-template-columns:1fr">'+
+    '<div class="fld"><label for="m_emp">কর্মচারী</label>'+sel('m_emp',ATT.people.map(p=>({v:p.id,t:p.name})),pref.employee_id||'',true)+'</div>'+
+    '<div class="fld"><label for="m_date">তারিখ</label><input id="m_date" type="date" value="'+date+'" max="'+today+'"></div>'+
+    '<div class="fld"><label for="m_time">সময়</label><input id="m_time" type="time" value="'+(pref.time||(date===today?nowHM():''))+'"></div>'+
+    '<div class="fld"><label for="m_type">ধরন</label>'+sel('m_type',[{v:'IN',t:'Entry (আসা)'},{v:'OUT',t:'Exit (যাওয়া)'}],pref.type||'OUT',false)+'</div>'+
+    '<div class="fld"><label for="m_why">কারণ (বাধ্যতামূলক)</label><input id="m_why" type="text" maxlength="200" placeholder="যেমন: লাঞ্চে যাওয়ার সময় Exit দিতে ভুলে গেছেন"></div></div>'+
+    '<div style="margin-top:14px;display:flex;gap:10px"><button class="btn pri" id="m_ok">সংরক্ষণ করুন</button><button class="btn" id="m_no">বাতিল</button></div>');
+  $('m_no').onclick=()=>m.close();
+  $('m_ok').onclick=async()=>{
+    const btn=$('m_ok'); btn.disabled=true;
+    try{ await api('att.manual',{employee_id:$('m_emp').value,date:$('m_date').value,time:$('m_time').value,type:$('m_type').value,reason:$('m_why').value}); m.close(); if(done) await done(); }
+    catch(e){ btn.disabled=false; if(isAuthErr(e)){ m.close(); fail(e); } else { $('mMsg').textContent=errText(e); $('mMsg').className='err'; } }
+  };
+}
+function editModal(ev,date,done){
+  const m=modal('<h2 style="margin:0 0 4px;font-size:18px">রেকর্ড সংশোধন</h2><div class="muted" style="margin-bottom:10px">'+fmtD(date)+' · এখন: '+fmtT(ev.time)+' '+TYPE_L[ev.type]+'</div><div id="eMsg" role="alert" style="margin-bottom:8px"></div><div class="grid" style="grid-template-columns:1fr">'+
+    '<div class="fld"><label for="e_time">সঠিক সময়</label><input id="e_time" type="time" value="'+ev.time+'"></div>'+
+    '<div class="fld"><label for="e_type">ধরন</label>'+sel('e_type',[{v:'IN',t:'Entry (আসা)'},{v:'OUT',t:'Exit (যাওয়া)'}],ev.type,false)+'</div>'+
+    '<div class="fld"><label for="e_why">কারণ (বাধ্যতামূলক)</label><input id="e_why" type="text" maxlength="200"></div></div>'+
+    '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="e_ok">সংশোধন সংরক্ষণ</button><button class="btn" id="e_void" style="border-color:#9B1C1C;color:#9B1C1C">রেকর্ডটি বাতিল করুন</button><button class="btn" id="e_no">বন্ধ করুন</button></div>');
+  $('e_no').onclick=()=>m.close();
+  const run=async(action,p)=>{
+    [$('e_ok'),$('e_void')].forEach(x=>x.disabled=true);
+    try{ await api(action,p); m.close(); if(done) await done(); }
+    catch(e){ [$('e_ok'),$('e_void')].forEach(x=>x.disabled=false); if(isAuthErr(e)){ m.close(); fail(e); } else { $('eMsg').textContent=errText(e); $('eMsg').className='err'; } }
+  };
+  $('e_ok').onclick=()=>run('att.edit',{event_id:ev.id,time:$('e_time').value,type:$('e_type').value,reason:$('e_why').value});
+  $('e_void').onclick=()=>{ if(!$('e_why').value.trim()){ $('eMsg').textContent='বাতিলের কারণ লিখুন'; $('eMsg').className='err'; return; } if(confirm('এই রেকর্ড বাতিল করবেন? (মুছে যাবে না, বাতিল চিহ্ন থাকবে ও লগে লেখা থাকবে)')) run('att.void',{event_id:ev.id,reason:$('e_why').value}); };
+}
+
+/* ---------- month view ---------- */
+async function attMonth(){
+  const b=$('attBody'), A=ME.can.att;
+  b.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  if(!ATT.month) ATT.month=todayStr().slice(0,7);
+  const d=await api('att.month',{month:ATT.month,employee_id:ATT.emp||''});
+  if(A.scope==='all' && !ATT.emp) ATT.names=d.rows.map(r=>({id:r.employee_id,name:r.name_bn}));
+  const days=[]; for(let i=1;i<=d.days;i++) days.push(i);
+  const wd=i=>{ const x=new Date(Date.UTC(+d.month.slice(0,4),+d.month.slice(5,7)-1,i)); return x.getUTCDay(); };
+  b.innerHTML='<div class="card"><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end"><div class="fld"><label for="mm">মাস</label><input id="mm" type="month" value="'+d.month+'" max="'+d.today.slice(0,7)+'"></div>'+
+    (A.scope==='all'&&ATT.names?'<div class="fld"><label for="me">কর্মচারী</label>'+sel('me',[{v:'',t:'সবাই'}].concat(ATT.names.map(n=>({v:n.id,t:n.name}))),ATT.emp,false)+'</div>':'')+'</div>'+
+    '<div class="muted" style="margin-top:10px">'+MONTHS[+d.month.slice(5,7)-1]+' '+bnd(d.month.slice(0,4))+'</div>'+
+    '<div class="legend"><span><i class="cell st-p">প</i> উপস্থিত</span><span><i class="cell st-in">•</i> কাজে আছেন</span><span><i class="cell st-a">অ</i> অনুপস্থিত</span><span><i class="cell st-h">ব</i> ছুটির দিন</span><span><i class="cell st-l">ছু</i> ছুটি</span><span><i class="cell st-x">?</i> শুধু Exit</span><span><i class="cell st-p mis">প</i> Exit নেই</span></div></div>'+
+    '<div class="card"><div class="tw"><table class="mx" style="min-width:0"><thead><tr><th style="text-align:left;min-width:130px">কর্মচারী</th>'+days.map(i=>'<th'+(wd(i)===5?' style="color:var(--orange)"':'')+'>'+bnd(i)+'</th>').join('')+'</tr></thead><tbody>'+
+    (d.rows.length?d.rows.map((r,ri)=>'<tr><td style="text-align:left;font-weight:600;white-space:nowrap">'+esc(r.name_bn)+'</td>'+r.cells.map(c=>'<td>'+(c.s&&c.s!=='f'?'<button class="cell st-'+c.s+(c.m?' mis':'')+'" data-d="'+c.d+'" title="'+esc(ST[c.s]+(c.h?' · '+fmtH(c.h):'')+(c.m?' · Exit নেই':''))+'">'+CELL[c.s]+'</button>':'')+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+(d.days+1)+'" class="muted" style="text-align:left">এই মাসে কোনো কর্মচারী নেই।</td></tr>')+
+    '</tbody></table></div></div>'+
+    '<div class="card"><h2>মাসের সারাংশ</h2><div class="tw"><table><thead><tr><th>কর্মচারী</th><th>উপস্থিত</th><th>অনুপস্থিত</th><th>ছুটির দিন</th><th>ছুটি</th><th>Exit নেই</th><th>মোট সময়</th></tr></thead><tbody>'+
+    d.rows.map(r=>'<tr><td style="font-weight:600">'+esc(r.name_bn)+'</td><td>'+bnd(r.sum.p)+'</td><td>'+bnd(r.sum.a)+'</td><td>'+bnd(r.sum.h)+'</td><td>'+bnd(r.sum.l)+'</td><td>'+bnd(r.sum.missing)+'</td><td>'+fmtH(r.sum.hours)+'</td></tr>').join('')+'</tbody></table></div><div class="muted" style="margin-top:10px">"অনুপস্থিত" শুধু তথ্য। বেতন কাটা হবে কি না তা মালিকদের সিদ্ধান্তে বেতন তৈরির সময় ঠিক হবে। যোগদানের আগের দিন গোনা হয় না।</div></div>';
+  $('mm').onchange=()=>{ if($('mm').value){ ATT.month=$('mm').value; attMonth().catch(e=>{ if(isAuthErr(e)) fail(e); else say(errText(e)); }); } };
+  if($('me')) $('me').onchange=()=>{ ATT.emp=$('me').value; attMonth().catch(e=>{ if(isAuthErr(e)) fail(e); else say(errText(e)); }); };
+  b.querySelectorAll('button.cell').forEach(x=>x.onclick=()=>{ ATT.date=d.month+'-'+('0'+x.dataset.d).slice(-2); ATT.tab='day'; attendancePage(); });
+}
+
+/* ---------- QR scan ---------- */
+async function attScan(){
+  const b=$('attBody');
+  b.innerHTML='<div class="card"><div class="scanbox"><video id="scV" playsinline muted></video><div class="frame"></div></div><div id="scSt" class="muted" style="text-align:center;margin-top:10px" role="status">ক্যামেরা চালু হচ্ছে...</div></div><div id="scRes"></div>';
+  if(typeof jsQR==='undefined'){ $('scSt').textContent='QR পড়ার অংশ লোড হয়নি। ইন্টারনেট দেখে পেজ রিফ্রেশ করুন।'; $('scSt').className='err'; return; }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ $('scSt').textContent='এই ব্রাউজারে ক্যামেরা চলে না। Chrome বা Safari-তে খুলুন।'; $('scSt').className='err'; return; }
+  try{
+    SC.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+  }catch(e){
+    $('scSt').className='err';
+    $('scSt').textContent=(e&&e.name==='NotAllowedError')?'ক্যামেরার অনুমতি দেওয়া হয়নি। ব্রাউজারের ঠিকানার পাশের তালা চিহ্নে চেপে ক্যামেরা "Allow" করুন, তারপর রিফ্রেশ করুন।':(e&&e.name==='NotFoundError')?'কোনো ক্যামেরা পাওয়া যায়নি।':'ক্যামেরা চালু করা যায়নি: '+esc(e&&e.message||e);
+    return;
+  }
+  SC.video=$('scV'); SC.video.srcObject=SC.stream; await SC.video.play().catch(()=>{});
+  SC.cv=document.createElement('canvas'); SC.on=true; SC.busy=false;
+  $('scSt').textContent='কার্ডের QR ফ্রেমের ভেতরে ধরুন';
+  scanLoop();
+}
+function scanLoop(){
+  if(!SC.on) return;
+  const vd=SC.video;
+  if(!SC.busy && vd && vd.readyState>=2 && vd.videoWidth){
+    const w=Math.min(640,vd.videoWidth), h=Math.round(vd.videoHeight*w/vd.videoWidth);
+    SC.cv.width=w; SC.cv.height=h;
+    const cx=SC.cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(vd,0,0,w,h);
+    const img=cx.getImageData(0,0,w,h), c=jsQR(img.data,w,h,{inversionAttempts:'dontInvert'});
+    if(c&&c.data&&!(c.data===SC.lastCode&&Date.now()<SC.until)) onScanned(c.data);
+  }
+  SC.timer=setTimeout(scanLoop,150);
+}
+function scanResume(){ SC.busy=false; const r=$('scRes'); if(r) r.innerHTML=''; const s=$('scSt'); if(s){ s.className='muted'; s.textContent='কার্ডের QR ফ্রেমের ভেতরে ধরুন'; } }
+function scanShow(html){ const r=$('scRes'); if(r) r.innerHTML=html; }
+async function onScanned(code){
+  SC.busy=true; SC.lastCode=code; SC.until=Date.now()+4000;
+  if(navigator.vibrate) navigator.vibrate(60);
+  try{
+    const e=await api('att.lookup',{qr:code});
+    const avatar=e.photo?'<img src="'+e.photo+'" alt="">':esc((e.name_bn||'?').trim().charAt(0));
+    scanShow('<div class="card" style="text-align:center"><div class="avatar">'+avatar+'</div><h2 style="margin:12px 0 2px;font-size:22px">'+esc(e.name_bn)+'</h2><div class="muted">'+esc(e.designation)+' · '+esc(e.employee_id)+'</div>'+
+      '<div style="margin:12px 0">'+(e.today.length?e.today.map(x=>'<span class="st '+(x.type==='IN'?'st-p':'st-h')+'" style="margin:2px">'+TYPE_L[x.type]+' '+fmtT(x.time)+'</span>').join(' '):'<span class="muted">আজ এখনও কোনো Entry/Exit নেই</span>')+'</div>'+
+      '<div style="display:flex;gap:12px"><button class="bigbtn in" data-t="IN">Entry</button><button class="bigbtn out" data-t="OUT">Exit</button></div>'+
+      '<div style="margin-top:12px"><button class="btn" id="scCancel">বাতিল (পরের জন)</button></div></div>');
+    $('scCancel').onclick=scanResume;
+    document.querySelectorAll('#scRes [data-t]').forEach(x=>x.onclick=()=>scanRecord(code,e,x.dataset.t,false));
+  }catch(er){
+    if(isAuthErr(er)){ fail(er); return; }
+    scanShow('<div class="card" style="text-align:center"><p class="err" style="font-size:16px;font-weight:600">'+esc(errText(er))+'</p><button class="btn" id="scCancel">ঠিক আছে</button></div>');
+    $('scCancel').onclick=scanResume;
+  }
+}
+async function scanRecord(code,e,type,force){
+  document.querySelectorAll('#scRes button').forEach(x=>x.disabled=true);
+  try{
+    const r=await api('att.record',{qr:code,type:type,force:force});
+    if(r.needs_confirm){
+      const last=r.last?TYPE_L[r.last.type]+' '+fmtT(r.last.time):'';
+      const msg=r.why==='in_after_in'?'আজ আগেই '+last+' আছে, কিন্তু মাঝে কোনো Exit নেই।':r.why==='out_after_out'?'আজ আগেই '+last+' আছে।':'আজ এখনও কোনো Entry নেই।';
+      const fixType=r.why==='in_after_in'?'OUT':r.why==='out_without_in'?'IN':'';
+      scanShow('<div class="card" style="text-align:center"><h2 style="margin:0 0 6px;font-size:18px">'+esc(e.name_bn)+'</h2><p style="font-weight:600;color:#9A3412">'+esc(msg)+'</p><p class="muted">কী করবেন?</p><div style="display:flex;flex-direction:column;gap:10px">'+
+        (A_manual()&&fixType?'<button class="btn pri" id="scFix">হাতে '+TYPE_L[fixType]+' যোগ করুন'+(r.why==='in_after_in'?' (তারপর নতুন Entry নেওয়া হবে)':' (তারপর Exit নেওয়া হবে)')+'</button>':'')+
+        '<button class="btn" id="scForce">তবুও '+TYPE_L[type]+' দিন</button><button class="btn" id="scCancel">বাতিল</button></div></div>');
+      $('scCancel').onclick=scanResume;
+      $('scForce').onclick=()=>scanRecord(code,e,type,true);
+      if($('scFix')) $('scFix').onclick=()=>manualModal({employee_id:e.employee_id,date:todayStr(),type:fixType},()=>scanRecord(code,e,type,false));
+      return;
+    }
+    scanShow('<div class="card okcard" style="text-align:center"><div style="font-size:44px">✔</div><h2 style="margin:4px 0;font-size:22px">'+esc(r.name_bn)+'</h2><div style="font-size:18px;font-weight:700">'+TYPE_L[r.type]+' · '+fmtT(r.time)+'</div></div>');
+    setTimeout(scanResume,2200);
+  }catch(er){
+    if(isAuthErr(er)){ fail(er); return; }
+    scanShow('<div class="card" style="text-align:center"><p class="err" style="font-size:16px;font-weight:600">'+esc(errText(er))+'</p><button class="btn" id="scCancel">ঠিক আছে</button></div>');
+    $('scCancel').onclick=scanResume;
+  }
+}
+const A_manual=()=>!!(ME&&ME.can&&ME.can.att&&ME.can.att.manual);
+
 function fail(e){
   if(e.message==='NOT_LOGGED_IN'||String(e.message).startsWith('NOT_ALLOWED')){ logout(); return; }
   $('view').innerHTML='<p class="err">'+(e.message==='NOT_PERMITTED'?'এই তথ্য দেখার অনুমতি আপনার নেই।':'সমস্যা: '+esc(e.message))+'</p>';
