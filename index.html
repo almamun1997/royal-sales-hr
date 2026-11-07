@@ -112,7 +112,7 @@ button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
     <div class="brand"><div class="lg"><img src="logo.png" alt="" onerror="this.style.display='none'"></div><div><b>Royal Sales</b><small>HR ও বেতন ব্যবস্থাপনা</small></div></div>
     <a class="soon" href="#">ড্যাশবোর্ড</a><a id="navAtt" href="#/attendance">হাজিরা</a>
     <a id="navEmp" href="#/employees">কর্মচারী</a>
-    <a class="soon" href="#">ছুটি</a><a class="soon" href="#">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
+    <a id="navLeave" href="#/leave">ছুটি</a><a class="soon" href="#">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
     <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
     <a id="navDes" class="hide" href="#/designations">পদবী</a>
@@ -161,7 +161,7 @@ async function start(){
   try{
     ME = await api('me');
     $('meName').textContent = ME.name || ME.email;
-    $('meRole').textContent = ROLE[ME.role] || ME.role;
+    $('meRole').textContent = (ROLE[ME.role] || ME.role)+(ME.can.delegate?' · সুপার অ্যাডমিন ক্ষমতাসহ':'');
     $('navUsers').classList.toggle('hide', !ME.can.sa);
     $('navDes').classList.toggle('hide', !ME.can.sa);
     $('navCards').classList.toggle('hide', !ME.can.sa);
@@ -207,6 +207,7 @@ function route(){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
   const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
+  if(h==='#/leave'){ $('navLeave').classList.add('on'); leavePage(); return; }
   if(h==='#/attendance'){ $('navAtt').classList.add('on'); attendancePage(); return; }
   if(h==='#/cards'){ $('navCards').classList.add('on'); cardsPage(); return; }
   if(h==='#/company'){ $('navCo').classList.add('on'); companyPage(); return; }
@@ -486,12 +487,17 @@ async function usersPage(){
   const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
   try{
     const rows = await api('users.list');
-    v.innerHTML='<h1 class="t">ব্যবহারকারী</h1><div class="sub">কাউকে জোর করে লগআউট করালে তিনি পরের অনুরোধেই বেরিয়ে যাবেন এবং আবার Google দিয়ে ঢুকতে হবে।</div><div class="card"><div class="tw"><table><thead><tr><th>নাম</th><th>ইমেইল</th><th>ভূমিকা</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
-      rows.map(u=>'<tr><td style="font-weight:600">'+(u.name?esc(u.name):'<span class="muted">—</span>')+'</td><td>'+esc(u.email)+'</td><td>'+esc(ROLE[u.role]||u.role)+'</td><td><span class="chip'+(u.is_active?'':' o')+'">'+(u.is_active?'Active':'বন্ধ')+'</span></td><td style="white-space:nowrap">'+(u.role==='Admin'?'<button class="btn" data-pm="'+esc(u.user_id)+'" data-pn="'+esc(u.name||u.email)+'">অনুমতি</button> ':'')+'<button class="btn" data-lo="'+esc(u.user_id)+'">লগআউট করান</button></td></tr>').join('')+
+    v.innerHTML='<h1 class="t">ব্যবহারকারী</h1><div class="sub">কাউকে জোর করে লগআউট করালে তিনি পরের অনুরোধেই বেরিয়ে যাবেন এবং আবার Google দিয়ে ঢুকতে হবে।'+(ME.can.realSa?' "ক্ষমতা দিন" চাপলে সেই ব্যবহারকারী সুপার অ্যাডমিনের মতো কাজ করতে পারবেন (আপনার অ্যাকাউন্টে হাত দেওয়া ছাড়া)। "ক্ষমতা তুলে নিন" চাপলে পরের অনুরোধ থেকেই বন্ধ হবে।':'')+'</div><div class="card"><div class="tw"><table><thead><tr><th>নাম</th><th>ইমেইল</th><th>ভূমিকা</th><th>অবস্থা</th><th>সুপার অ্যাডমিন ক্ষমতা</th><th></th></tr></thead><tbody>'+
+      rows.map(u=>'<tr><td style="font-weight:600">'+(u.name?esc(u.name):'<span class="muted">—</span>')+'</td><td>'+esc(u.email)+'</td><td>'+esc(ROLE[u.role]||u.role)+'</td><td><span class="chip'+(u.is_active?'':' o')+'">'+(u.is_active?'Active':'বন্ধ')+'</span></td><td>'+(u.delegate?'<span class="chip o">আছে</span> ':'<span class="muted">—</span> ')+(ME.can.realSa&&u.role!=='Super Admin'&&u.is_active?'<button class="btn" data-dg="'+esc(u.user_id)+'" data-on="'+(u.delegate?'0':'1')+'" data-dn="'+esc(u.name||u.email)+'">'+(u.delegate?'ক্ষমতা তুলে নিন':'ক্ষমতা দিন')+'</button>':'')+'</td><td style="white-space:nowrap">'+(u.role==='Admin'?'<button class="btn" data-pm="'+esc(u.user_id)+'" data-pn="'+esc(u.name||u.email)+'">অনুমতি</button> ':'')+'<button class="btn" data-lo="'+esc(u.user_id)+'">লগআউট করান</button></td></tr>').join('')+
       '</tbody></table></div><div style="margin-top:16px"><button class="btn" id="loAll">সবাইকে লগআউট করান (আমি ছাড়া)</button></div><div id="loMsg" class="muted" style="margin-top:12px" role="status"></div></div><div id="pmBox"></div>';
     const run=async(p,q)=>{ if(!confirm(q)) return; try{ const r=await api('users.forceLogout',p); $('loMsg').textContent=r.logged_out+' জনকে লগআউট করানো হয়েছে।'; }catch(e){ fail(e); } };
     v.querySelectorAll('[data-lo]').forEach(b=>b.onclick=()=>run({user_id:b.dataset.lo},'এই ব্যবহারকারীকে লগআউট করাবেন?'));
     $('loAll').onclick=()=>run({all:true},'আপনি ছাড়া সবাইকে লগআউট করাবেন?');
+    v.querySelectorAll('[data-dg]').forEach(b=>b.onclick=async()=>{
+      const on=b.dataset.on==='1';
+      if(!confirm(on?(b.dataset.dn+'-কে সুপার অ্যাডমিনের ক্ষমতা দেবেন?\n\nতিনি প্রায় সব কিছু দেখতে ও বদলাতে পারবেন (বেতন, ছুটি, হাজিরা, কর্মচারী, ব্যবহারকারী ইত্যাদি)। তবে আপনার অ্যাকাউন্ট মোছা, নিষ্ক্রিয় করা, লগআউট করানো, কিংবা অন্য কাউকে এই ক্ষমতা দেওয়া বা তুলে নেওয়া তিনি পারবেন না। আপনি না তোলা পর্যন্ত এটি চালু থাকবে এবং তাঁর সব কাজ লগে লেখা হবে।'):(b.dataset.dn+'-এর কাছ থেকে সুপার অ্যাডমিনের ক্ষমতা তুলে নেবেন? তুলে নেওয়ার পর পরের অনুরোধ থেকেই কার্যকর হবে।'))) return;
+      try{ await api('users.delegate',{user_id:b.dataset.dg,on:on}); usersPage(); }catch(e){ if(isAuthErr(e)) fail(e); else $('loMsg').textContent=errText(e); }
+    });
     v.querySelectorAll('[data-pm]').forEach(b=>b.onclick=async()=>{
       try{
         const uid=b.dataset.pm, d=await api('permissions.get',{user_id:uid}), box=$('pmBox');
@@ -754,6 +760,90 @@ function zoomCard(cc){
   $('zX').onclick=()=>m.close();
   apply();
 }
+/* =====================================================================
+ * Leave, holiday calendar (Phase 7 step c)
+ * ===================================================================== */
+const LST = {Pending:'অপেক্ষমাণ',Approved:'অনুমোদিত',Rejected:'প্রত্যাখ্যাত',Cancelled:'বাতিল'};
+const LCLS = {Pending:'st-x',Approved:'st-p',Rejected:'st-a',Cancelled:'st-w'};
+const fmtR = (a,b) => a===b ? fmtD(a) : fmtD(a)+' থেকে '+fmtD(b);
+let LV={tab:'',filter:'',year:''};
+
+async function leavePage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const D=await api('leave.list'), F=D.flags;
+    const tabs=[];
+    if(F.apply) tabs.push(['my','আমার ছুটি']);
+    if(D.all) tabs.push(['all','সব ছুটি']);
+    tabs.push(['cal','ছুটির ক্যালেন্ডার']);
+    if(ME.can.sa) tabs.push(['types','ছুটির ধরন']);
+    if(!LV.tab||!tabs.some(t=>t[0]===LV.tab)) LV.tab=tabs[0][0];
+    const pend=D.rows.filter(x=>x.status==='Pending').length;
+    v.innerHTML='<h1 class="t">ছুটি</h1><div class="sub">ছুটিতে বেতন কাটা হয় না এবং ছুটির দিন কাজের দিন হিসেবে গোনা হয়।'+(F.decide&&pend?' <b style="color:#9A3412">'+bnd(pend)+'টি আবেদন অনুমোদনের অপেক্ষায়।</b>':'')+'</div><div id="msg" role="alert" style="margin-bottom:12px"></div>'+
+      '<div class="tabs" role="tablist">'+tabs.map(t=>'<button class="tab'+(t[0]===LV.tab?' on':'')+'" role="tab" data-lt="'+t[0]+'">'+t[1]+'</button>').join('')+'</div><div id="lvBody"></div>';
+    v.querySelectorAll('[data-lt]').forEach(b=>b.onclick=()=>{ LV.tab=b.dataset.lt; leavePage(); });
+    const reload=()=>leavePage();
+    const guard=async fn=>{ try{ await fn(); }catch(e){ if(isAuthErr(e)) fail(e); else say(errText(e)); } };
+    const body=$('lvBody');
+    const typeSel=id=>sel(id,D.types.map(t=>({v:t,t:t})),D.types[0],false);
+    const chip=s=>'<span class="st '+LCLS[s]+'">'+LST[s]+'</span>';
+    const actions=(x)=>(x.can_decide?'<button class="btn pri" data-ok="'+esc(x.id)+'">অনুমোদন</button> <button class="btn" data-no="'+esc(x.id)+'">প্রত্যাখ্যান</button> ':'')+(x.can_cancel?'<button class="btn" data-cx="'+esc(x.id)+'" style="border-color:#9B1C1C;color:#9B1C1C">'+(x.status==='Pending'?'আবেদন তুলে নিন':'ছুটি বাতিল')+'</button>':'');
+    const bindRow=()=>{
+      body.querySelectorAll('[data-ok]').forEach(b=>b.onclick=()=>guard(async()=>{ await api('leave.decide',{leave_id:b.dataset.ok,decision:'Approved'}); reload(); }));
+      body.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{ if(confirm('এই আবেদন প্রত্যাখ্যান করবেন?')) guard(async()=>{ await api('leave.decide',{leave_id:b.dataset.no,decision:'Rejected'}); reload(); }); });
+      body.querySelectorAll('[data-cx]').forEach(b=>b.onclick=()=>{ if(confirm('এই ছুটি বাতিল করবেন?')) guard(async()=>{ await api('leave.cancel',{leave_id:b.dataset.cx}); reload(); }); });
+    };
+    const table=(rows,showName)=>'<div class="tw"><table><thead><tr>'+(showName?'<th>কর্মচারী</th>':'')+'<th>তারিখ</th><th>ধরন</th><th>দিন</th><th>অবস্থা</th><th>কারণ</th><th></th></tr></thead><tbody>'+
+      (rows.length?rows.map(x=>'<tr>'+(showName?'<td style="font-weight:600">'+esc(x.name)+'</td>':'')+'<td>'+esc(fmtR(x.start,x.end))+'</td><td>'+esc(x.type)+'</td><td>'+bnd(x.days)+'</td><td>'+chip(x.status)+(x.by&&x.status!=='Pending'?'<div class="muted" style="font-size:12px">'+esc(x.by)+'</div>':'')+'</td><td>'+esc(x.reason)+'</td><td style="white-space:nowrap">'+actions(x)+'</td></tr>').join(''):'<tr><td colspan="'+(showName?7:6)+'" class="muted">কোনো ছুটি নেই।</td></tr>')+'</tbody></table></div>';
+
+    if(LV.tab==='my'){
+      const mine=D.rows.filter(x=>x.own);
+      body.innerHTML='<div class="card"><h2>ছুটির আবেদন</h2><div class="grid"><div class="fld"><label for="a_type">ধরন</label>'+typeSel('a_type')+'</div><div class="fld"><label for="a_s">শুরুর তারিখ</label><input id="a_s" type="date" value="'+todayStr()+'"></div><div class="fld"><label for="a_e">শেষ তারিখ</label><input id="a_e" type="date" value="'+todayStr()+'"></div><div class="fld"><label for="a_r">কারণ (ঐচ্ছিক)</label><input id="a_r" type="text" maxlength="200"></div></div><div style="margin-top:14px"><button class="btn pri" id="a_go">আবেদন পাঠান</button></div><div class="muted" style="margin-top:10px">মালিক বা সুপার অ্যাডমিন অনুমোদন দিলে ছুটি কার্যকর হবে।</div></div>'+
+        '<div class="card"><h2>আমার ছুটির তালিকা</h2>'+table(mine,false)+'</div>';
+      $('a_s').onchange=()=>{ if($('a_e').value<$('a_s').value) $('a_e').value=$('a_s').value; };
+      $('a_go').onclick=()=>guard(async()=>{ await api('leave.apply',{type:$('a_type').value,start:$('a_s').value,end:$('a_e').value,reason:$('a_r').value}); say('আবেদন পাঠানো হয়েছে।',true); setTimeout(reload,500); });
+      bindRow();
+    } else if(LV.tab==='all'){
+      const rows=D.rows.filter(x=>!LV.filter||x.status===LV.filter);
+      body.innerHTML=(F.record?'<div class="card"><h2>মুখে জানানো ছুটি নথিভুক্ত করুন</h2><div class="grid"><div class="fld"><label for="r_emp">কর্মচারী</label>'+sel('r_emp',D.people.map(p=>({v:p.id,t:p.name})),'',true)+'</div><div class="fld"><label for="r_type">ধরন</label>'+typeSel('r_type')+'</div><div class="fld"><label for="r_s">শুরুর তারিখ</label><input id="r_s" type="date" value="'+todayStr()+'"></div><div class="fld"><label for="r_e">শেষ তারিখ</label><input id="r_e" type="date" value="'+todayStr()+'"></div><div class="fld"><label for="r_r">কারণ (ঐচ্ছিক)</label><input id="r_r" type="text" maxlength="200"></div></div><div style="margin-top:14px"><button class="btn pri" id="r_go">নথিভুক্ত করুন (সরাসরি অনুমোদিত)</button></div></div>':'')+
+        '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><h2 style="margin:0;flex:1">সব ছুটি</h2><label class="muted" for="f_st">অবস্থা</label>'+sel('f_st',[{v:'',t:'সব'},{v:'Pending',t:'অপেক্ষমাণ'},{v:'Approved',t:'অনুমোদিত'},{v:'Rejected',t:'প্রত্যাখ্যাত'},{v:'Cancelled',t:'বাতিল'}],LV.filter,false)+'</div>'+table(rows,true)+'</div>';
+      $('f_st').onchange=()=>{ LV.filter=$('f_st').value; leavePage(); };
+      if($('r_go')){ $('r_s').onchange=()=>{ if($('r_e').value<$('r_s').value) $('r_e').value=$('r_s').value; };
+        $('r_go').onclick=()=>guard(async()=>{ await api('leave.record',{employee_id:$('r_emp').value,type:$('r_type').value,start:$('r_s').value,end:$('r_e').value,reason:$('r_r').value}); say('ছুটি নথিভুক্ত হয়েছে।',true); setTimeout(reload,500); }); }
+      bindRow();
+    } else if(LV.tab==='cal'){
+      await calTab(body,guard);
+    } else if(LV.tab==='types'){
+      let list=D.types.slice();
+      const draw=()=>{
+        body.innerHTML='<div class="card"><h2>ছুটির ধরন</h2><p class="muted">ছুটির আবেদন বা নথিভুক্তির সময় এই তালিকা থেকে বাছাই করা হয়। পুরনো রেকর্ড অপরিবর্তিত থাকে।</p><div id="tyList">'+
+          list.map((t,i)=>'<div style="display:flex;gap:8px;margin-bottom:8px"><input type="text" maxlength="30" value="'+esc(t)+'" data-ty="'+i+'" aria-label="ধরন '+bnd(i+1)+'" style="flex:1;min-height:44px;padding:0 12px;border:1px solid #CBD3E1;border-radius:10px;font-family:inherit"><button class="btn" data-rm="'+i+'" aria-label="সরান">সরান</button></div>').join('')+
+          '</div><div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="ty_add"'+(list.length>=12?' disabled':'')+'>+ নতুন ধরন</button><button class="btn pri" id="ty_save">সংরক্ষণ করুন</button></div></div>';
+        const sync=()=>body.querySelectorAll('[data-ty]').forEach(i=>list[+i.dataset.ty]=i.value);
+        $('ty_add').onclick=()=>{ sync(); list.push(''); draw(); };
+        body.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ sync(); list.splice(+b.dataset.rm,1); draw(); });
+        $('ty_save').onclick=()=>guard(async()=>{ sync(); await api('leave.typesSave',{types:list}); say('সংরক্ষণ হয়েছে।',true); });
+      };
+      draw();
+    }
+  }catch(e){ if(isAuthErr(e)) fail(e); else $('view').innerHTML='<p class="err">'+esc(errText(e))+'</p>'; }
+}
+
+async function calTab(body,guard){
+  const thisYear=todayStr().slice(0,4);
+  if(!LV.year) LV.year=thisYear;
+  const H=await api('holiday.list',{year:LV.year});
+  const years=[]; for(let y=+thisYear-1;y<=+thisYear+2;y++) years.push({v:String(y),t:bnd(y)});
+  body.innerHTML='<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0;flex:1">ছুটির ক্যালেন্ডার</h2><label class="muted" for="c_year">বছর</label>'+sel('c_year',years,LV.year,false)+'</div>'+
+    '<h3 style="font-size:15px;margin:16px 0 6px">প্রতি মাসের শেষ শনিবার (স্বয়ংক্রিয়)</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'+H.auto.map(d=>'<span class="st st-h">'+bnd(+d.slice(8,10))+' '+MONTHS[+d.slice(5,7)-1]+'</span>').join('')+'</div>'+
+    '<h3 style="font-size:15px;margin:18px 0 6px">যোগ করা ছুটি (ঈদ, সরকারি ছুটি, দোকান বন্ধ)</h3>'+
+    '<div class="tw"><table><thead><tr><th>তারিখ</th><th>নাম</th><th></th></tr></thead><tbody>'+(H.manual.length?H.manual.map(h=>'<tr><td>'+esc(fmtD(h.date))+'</td><td style="font-weight:600">'+esc(h.name)+'</td><td>'+(H.can_edit?'<button class="btn" data-hd="'+esc(h.id)+'" style="border-color:#9B1C1C;color:#9B1C1C">মুছুন</button>':'')+'</td></tr>').join(''):'<tr><td colspan="3" class="muted">এই বছরে এখনও কোনো ছুটি যোগ করা হয়নি।</td></tr>')+'</tbody></table></div></div>'+
+    (H.can_edit?'<div class="card"><h2>নতুন ছুটি যোগ করুন</h2><div class="grid"><div class="fld"><label for="h_d">শুরুর তারিখ</label><input id="h_d" type="date" value="'+todayStr()+'"></div><div class="fld"><label for="h_n">কত দিন</label><input id="h_n" type="number" min="1" max="30" value="1" inputmode="numeric"></div><div class="fld"><label for="h_t">ছুটির নাম</label><input id="h_t" type="text" maxlength="60" placeholder="যেমন: ঈদুল ফিতর"></div></div><div style="margin-top:14px"><button class="btn pri" id="h_go">ছুটি যোগ করুন</button></div><div class="muted" style="margin-top:10px">এই দিনগুলো বেতনে কাজের দিন হিসেবে গোনা হবে। তারিখ ঠিক আছে কি না যোগ করার আগে দেখে নিন।</div></div>':'');
+  $('c_year').onchange=()=>{ LV.year=$('c_year').value; leavePage(); };
+  body.querySelectorAll('[data-hd]').forEach(b=>b.onclick=()=>{ if(confirm('এই ছুটি মুছবেন?')) guard(async()=>{ await api('holiday.delete',{id:b.dataset.hd}); leavePage(); }); });
+  if($('h_go')) $('h_go').onclick=()=>guard(async()=>{ const r=await api('holiday.save',{date:$('h_d').value,days:$('h_n').value,name:$('h_t').value}); say(bnd(r.added)+' দিনের ছুটি যোগ হয়েছে।',true); setTimeout(()=>{ LV.year=$('h_d').value.slice(0,4); leavePage(); },500); });
+}
+
 function fail(e){
   if(e.message==='NOT_LOGGED_IN'||String(e.message).startsWith('NOT_ALLOWED')){ logout(); return; }
   $('view').innerHTML='<p class="err">'+(e.message==='NOT_PERMITTED'?'এই তথ্য দেখার অনুমতি আপনার নেই।':'সমস্যা: '+esc(e.message))+'</p>';
