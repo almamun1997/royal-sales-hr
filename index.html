@@ -299,7 +299,7 @@ async function profile(id){
     const [r,m] = await Promise.all([api('employees.get',{id}), meta()]);
     let EX = r.personal ? await api('extras.list',{id}) : null;
     let exEdit=null;
-    const canEx = id===ME.employee_id || ME.can.sa;
+    const canEx = id===ME.employee_id || ME.can.sa || (r.editable||[]).includes('permanent_address');
     const photo = r.has_photo ? api('photo.get',{id}).catch(()=>null) : Promise.resolve(null);
     const canPhoto = ME.can.editOthers || id===ME.employee_id;
     let hist=null, mode='view', panel='', cardRes=null, cardLang='bn', cardPanel=false, cardCanv=null, cardOpen=CARD_OPEN_NEXT; CARD_OPEN_NEXT=false;
