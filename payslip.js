@@ -134,5 +134,20 @@
     canvases.forEach((c, i) => { if (i) doc.addPage('a4', 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
     saveBlob(doc.output('blob'), name);
   }
-  window.PAYSLIP = { render, pdf };
+  // Puts the slips onto A4 pages: 1 per page, or 4 per page (2 x 2, each at exactly half size) with cut lines
+  function layout(cans, per) {
+    if (per !== 4) return cans;
+    const PW = W * S, PH = H * S, pages = [];
+    for (let i = 0; i < cans.length; i += 4) {
+      const pg = document.createElement('canvas'); pg.width = PW; pg.height = PH;
+      const x = pg.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH);
+      const cw = PW / 2, ch = PH / 2, m = 0.02 * PW / 2;           // 2% margin inside each cell for printers
+      cans.slice(i, i + 4).forEach((c, k) => { const col = k % 2, row = Math.floor(k / 2); x.drawImage(c, col * cw + m, row * ch + m * (PH / PW), cw - 2 * m, (cw - 2 * m) * (PH / PW)); });
+      x.strokeStyle = '#B8C0D0'; x.lineWidth = 2; x.setLineDash([14, 10]);
+      x.beginPath(); x.moveTo(cw, 0); x.lineTo(cw, PH); x.moveTo(0, ch); x.lineTo(PW, ch); x.stroke();
+      pages.push(pg);
+    }
+    return pages;
+  }
+  window.PAYSLIP = { render, pdf, layout };
 })();
