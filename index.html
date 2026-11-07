@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="idcard.js"></script>
-<script src="payslip.js"></script>
+<script src="payslip.js?v=3"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--blue:#283891;--navy:#0F1F4D;--orange:#F15A29;--ink:#0F172A;--mute:#5B6577;--line:#E3E7EF;--bg:#F4F6FA}
@@ -624,6 +624,7 @@ async function payslipPreview(ids,month){
   try{
     const D=await api('payroll.slips',{month:month,employee_ids:ids||undefined});
     if(!D.rows.length){ alert('এই মাসের পে স্লিপ এখনও তৈরি হয়নি। হিসাব চূড়ান্ত হলে পাওয়া যাবে।'); return; }
+    if(typeof PAYSLIP==='undefined'||!PAYSLIP.layout){ alert('পুরনো payslip.js লোড হয়েছে। নতুন payslip.js আপলোড করা আছে কি না দেখুন, তারপর Ctrl+Shift+R চাপুন।'); return; }
     const cans=[]; for(const s of D.rows) cans.push(await PAYSLIP.render(s,D.company,'logo.png'));
     const multi=cans.length>1; let per=multi?4:1, pages=[];
     const m=modal('<h2 style="margin-top:0">পে স্লিপ — '+esc(pmLabel(month))+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button></div>':'')+'<div id="psBox" style="max-height:62vh;overflow:auto;background:#EEF1F7;padding:12px;border-radius:12px;display:grid;gap:12px;justify-items:center"></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
