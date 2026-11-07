@@ -544,7 +544,7 @@ async function usersPage(){
  * Payroll (Phase 8, steps a and b): monthly sheet, absence deductions, mid-month salary choice
  * ===================================================================== */
 const PAYS={ month:'', shown:false, data:null };
-const pm = n => (n===null||n===undefined) ? '—' : (PAYS.shown ? '৳ '+bnd(Number(n).toLocaleString('en-US',{maximumFractionDigits:4,useGrouping:true})) : MASK);
+const pm = n => (n===null||n===undefined) ? '—' : (PAYS.shown ? '৳ '+bnd(Number(n).toLocaleString('en-US',{maximumFractionDigits:2,useGrouping:true})) : MASK);
 const pmLabel = m => MONTHS[+m.slice(5,7)-1]+' '+bnd(m.slice(0,4));
 const pmShift = (m,n) => { const d=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1+n,1)); return d.toISOString().slice(0,7); };
 async function payrollPage(){
@@ -566,7 +566,7 @@ function payDraw(){
     '<div class="tw"><table><thead><tr><th>নাম</th><th>কাজের দিন</th><th>মাসিক বেতন</th><th>মোট</th><th>কর্তন</th><th>প্রদেয়</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
     (D.rows.length?D.rows.map(r=>'<tr><td style="font-weight:600">'+esc(r.name_bn)+'<div class="muted" style="font-weight:400">'+esc(r.designation)+'</div></td><td>'+bnd(r.days_worked)+' / '+bnd(r.partial?r.employed_days:(r.monthly_salary===null?r.month_days:30))+'</td><td>'+(r.monthly_salary===null?'<span class="muted">মিশ্র</span>':pm(r.monthly_salary))+'</td><td>'+pm(r.gross)+'</td><td>'+(r.deduction?pm(r.deduction):'—')+'</td><td style="font-weight:700">'+pm(r.net)+'</td><td>'+flag(r)+'</td><td><button class="btn" data-pd="'+esc(r.employee_id)+'">বিস্তারিত</button></td></tr>').join(''):'<tr><td colspan="8" class="muted">এই মাসে কোনো কর্মচারী ছিলেন না।</td></tr>')+
     '</tbody>'+(D.rows.length?'<tfoot><tr><td colspan="3" style="font-weight:700">মোট</td><td style="font-weight:700">'+pm(D.totals.gross)+'</td><td style="font-weight:700">'+(D.totals.deduction?pm(D.totals.deduction):'—')+'</td><td style="font-weight:700">'+pm(D.totals.net)+'</td><td colspan="2"></td></tr></tfoot>':'')+'</table></div>'+
-    '<div class="muted" style="margin-top:12px">অঙ্ক কোথাও গোল করা হয় না। পরের ধাপে হিসাব চূড়ান্ত করা, কিস্তিতে পরিশোধ ও পে স্লিপ আসবে।</div></div>';
+    '<div class="muted" style="margin-top:12px">অঙ্ক দশমিকের পর ২ ঘর পর্যন্ত দেখানো হয়, ভেতরের হিসাব পুরো সূক্ষ্ম থাকে। পরের ধাপে হিসাব চূড়ান্ত করা, কিস্তিতে পরিশোধ ও পে স্লিপ আসবে।</div></div>';
   $('pPrev').onclick=()=>{ PAYS.month=pmShift(PAYS.month,-1); payrollPage(); };
   $('pNext').onclick=()=>{ PAYS.month=pmShift(PAYS.month,1); payrollPage(); };
   v.querySelector('[data-eye="pay"]').onclick=()=>{ PAYS.shown=!PAYS.shown; if(PAYS.shown) autoHide(()=>{ PAYS.shown=false; if(location.hash==='#/payroll'&&PAYS.data) payDraw(); }); payDraw(); };
