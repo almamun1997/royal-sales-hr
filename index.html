@@ -112,7 +112,7 @@ button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
     <div class="brand"><div class="lg"><img src="logo.png" alt="" onerror="this.style.display='none'"></div><div><b>Royal Sales</b><small>HR ও বেতন ব্যবস্থাপনা</small></div></div>
     <a class="soon" href="#">ড্যাশবোর্ড</a><a id="navAtt" href="#/attendance">হাজিরা</a>
     <a id="navEmp" href="#/employees">কর্মচারী</a>
-    <a id="navLeave" href="#/leave">ছুটি</a><a class="soon" href="#">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
+    <a id="navLeave" href="#/leave">ছুটি</a><a id="navPay" class="hide" href="#/payroll">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
     <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
     <a id="navDes" class="hide" href="#/designations">পদবী</a>
@@ -163,6 +163,7 @@ async function start(){
     $('meName').textContent = ME.name || ME.email;
     $('meRole').textContent = (ROLE[ME.role] || ME.role)+(ME.can.delegate?' · সুপার অ্যাডমিন ক্ষমতাসহ':'');
     $('navUsers').classList.toggle('hide', !ME.can.sa);
+    $('navPay').classList.toggle('hide', !(ME.can.sa||ME.role==='Owner'));
     $('navDes').classList.toggle('hide', !ME.can.sa);
     $('navCards').classList.toggle('hide', !ME.can.sa);
     $('navCo').classList.toggle('hide', !ME.can.sa);
@@ -207,6 +208,7 @@ function route(){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
   const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
+  if(h==='#/payroll'){ $('navPay').classList.add('on'); payrollPage(); return; }
   if(h==='#/leave'){ $('navLeave').classList.add('on'); leavePage(); return; }
   if(h==='#/attendance'){ $('navAtt').classList.add('on'); attendancePage(); return; }
   if(h==='#/cards'){ $('navCards').classList.add('on'); cardsPage(); return; }
@@ -537,6 +539,60 @@ async function usersPage(){
       }catch(e){ if(isAuthErr(e)) fail(e); else $('loMsg').textContent=errText(e); }
     });
   }catch(e){ fail(e); }
+}
+/* =====================================================================
+ * Payroll (Phase 8, steps a and b): monthly sheet, absence deductions, mid-month salary choice
+ * ===================================================================== */
+const PAYS={ month:'', shown:false, data:null };
+const pm = n => (n===null||n===undefined) ? '—' : (PAYS.shown ? '৳ '+bnd(Number(n).toLocaleString('en-US',{maximumFractionDigits:4,useGrouping:true})) : MASK);
+const pmLabel = m => MONTHS[+m.slice(5,7)-1]+' '+bnd(m.slice(0,4));
+const pmShift = (m,n) => { const d=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1+n,1)); return d.toISOString().slice(0,7); };
+async function payrollPage(){
+  const v=$('view');
+  if(!PAYS.month){ const t=todayStr(); PAYS.month = +t.slice(8,10)>=1 ? pmShift(t.slice(0,7),-1) : t.slice(0,7); }
+  v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const D=await api('payroll.month',{month:PAYS.month}); PAYS.data=D; payDraw();
+  }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">বেতন</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
+}
+function payDraw(){
+  const D=PAYS.data, v=$('view'), cur=todayStr().slice(0,7);
+  const flag=r=>(r.locked?'<span class="chip">চূড়ান্ত</span> ':'')+(r.needs_choice?'<span class="chip o">বেতন-বদলের পছন্দ বাকি</span> ':'')+(r.partial?'<span class="chip o">আংশিক মাস</span> ':'')+(r.deduct_days?'<span class="chip o">কর্তন '+bnd(r.deduct_days)+' দিন</span> ':'');
+  v.innerHTML='<h1 class="t">বেতন</h1><div class="sub">মাস বেছে সবার বেতনের হিসাব দেখুন। পূর্ণ মাস কাজ করলে পূর্ণ বেতন, আংশিক মাসে বেতন ÷ ৩০ × দিন। অনুপস্থিত দিনে কর্তন না বসালে বেতন কাটা যায় না।</div>'+
+    '<div id="pMsg" role="alert"></div>'+
+    '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="pPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(D.month))+'</b><button class="btn" id="pNext" aria-label="পরের মাস"'+(D.month>=cur?' disabled':'')+'>›</button>'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span></div>'+
+    (D.month_over?'':'<div class="muted" style="margin-bottom:12px">⚠ মাস এখনও শেষ হয়নি। বাকি দিনগুলোও ধরে সাময়িক হিসাব দেখানো হচ্ছে।</div>')+
+    (D.totals.pending?'<div class="err" style="margin-bottom:12px" role="alert">'+bnd(D.totals.pending)+' জনের বেতন এই মাসে বদলেছে। সুপার অ্যাডমিনকে হিসাবের উপায় বেছে নিতে হবে।</div>':'')+
+    '<div class="tw"><table><thead><tr><th>নাম</th><th>কাজের দিন</th><th>মাসিক বেতন</th><th>মোট</th><th>কর্তন</th><th>প্রদেয়</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
+    (D.rows.length?D.rows.map(r=>'<tr><td style="font-weight:600">'+esc(r.name_bn)+'<div class="muted" style="font-weight:400">'+esc(r.designation)+'</div></td><td>'+bnd(r.days_worked)+' / '+bnd(r.partial?r.employed_days:(r.monthly_salary===null?r.month_days:30))+'</td><td>'+(r.monthly_salary===null?'<span class="muted">মিশ্র</span>':pm(r.monthly_salary))+'</td><td>'+pm(r.gross)+'</td><td>'+(r.deduction?pm(r.deduction):'—')+'</td><td style="font-weight:700">'+pm(r.net)+'</td><td>'+flag(r)+'</td><td><button class="btn" data-pd="'+esc(r.employee_id)+'">বিস্তারিত</button></td></tr>').join(''):'<tr><td colspan="8" class="muted">এই মাসে কোনো কর্মচারী ছিলেন না।</td></tr>')+
+    '</tbody>'+(D.rows.length?'<tfoot><tr><td colspan="3" style="font-weight:700">মোট</td><td style="font-weight:700">'+pm(D.totals.gross)+'</td><td style="font-weight:700">'+(D.totals.deduction?pm(D.totals.deduction):'—')+'</td><td style="font-weight:700">'+pm(D.totals.net)+'</td><td colspan="2"></td></tr></tfoot>':'')+'</table></div>'+
+    '<div class="muted" style="margin-top:12px">অঙ্ক কোথাও গোল করা হয় না। পরের ধাপে হিসাব চূড়ান্ত করা, কিস্তিতে পরিশোধ ও পে স্লিপ আসবে।</div></div>';
+  $('pPrev').onclick=()=>{ PAYS.month=pmShift(PAYS.month,-1); payrollPage(); };
+  $('pNext').onclick=()=>{ PAYS.month=pmShift(PAYS.month,1); payrollPage(); };
+  v.querySelector('[data-eye="pay"]').onclick=()=>{ PAYS.shown=!PAYS.shown; if(PAYS.shown) autoHide(()=>{ PAYS.shown=false; if(location.hash==='#/payroll'&&PAYS.data) payDraw(); }); payDraw(); };
+  v.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>payDetail(b.dataset.pd));
+}
+function payDetail(id){
+  const D=PAYS.data, r=D.rows.find(x=>x.employee_id===id), ed=D.can_edit&&!r.locked;
+  const formula = r.partial ? 'আংশিক মাস: '+esc(pm(r.monthly_salary===null?null:r.monthly_salary))+' ÷ ৩০ × '+bnd(r.employed_days)+' দিন (যোগদান বা ছাড়ার কারণে)' : 'পুরো মাস কর্মরত ছিলেন, তাই পূর্ণ মাসিক বেতন (মাস '+bnd(r.month_days)+' দিনের হলেও)';
+  const modes=[['split','দিন ভাগ করে হিসাব (যে দিন যে বেতন ছিল সেই হারে)'],['old','পুরো মাস পুরনো হারে'],['new','পুরো মাস নতুন হারে']];
+  const ab=r.absent_dates.filter(d=>!r.deductions.some(x=>x.date===d&&!x.stale));
+  const m=modal('<h2 style="margin-top:0">'+esc(r.name_bn)+' — '+esc(pmLabel(r.month))+'</h2><div id="mMsg" role="alert"></div>'+
+    '<div style="display:flex;gap:28px;flex-wrap:wrap;margin:6px 0 12px"><div><div class="muted">মোট</div><b>'+pm(r.gross)+'</b></div><div><div class="muted">কর্তন</div><b>'+(r.deduction?pm(r.deduction):'—')+'</b></div><div><div class="muted">প্রদেয়</div><b>'+pm(r.net)+'</b></div></div>'+
+    '<p class="muted">'+formula+'</p>'+
+    (r.x_dates.length?'<p class="muted">⚠ শুধু Exit আছে এমন দিন: '+r.x_dates.map(d=>bnd(+d.slice(8))).join(', ')+' তারিখ। এগুলো হাজিরা পাতায় ঠিক করে নিন।</p>':'')+
+    (r.salary_changes.length?'<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3 style="margin-top:0">মাসের মাঝে বেতন বদলেছে</h3><p class="muted">'+r.salary_changes.map(c=>fmtD(c.from)+' থেকে '+esc(pm(c.amount))).join(' · ')+'</p>'+
+      (ed?modes.map(o=>'<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="radio" name="pmode" value="'+o[0]+'"'+(r.mode===o[0]?' checked':'')+'> '+o[1]+'</label>').join('')+'<button class="btn pri" id="pmSet" style="margin-top:8px">উপায় সংরক্ষণ করুন</button>':'<p>বাছাই: <b>'+esc((modes.find(o=>o[0]===r.mode)||['','এখনও বাছাই হয়নি'])[1])+'</b></p>')+'</div>':'')+
+    '<h3>অনুপস্থিত দিন ও কর্তন</h3>'+
+    (r.deductions.length?'<div class="tw"><table><thead><tr><th>তারিখ</th><th>নোট</th><th>কর্তন</th><th></th></tr></thead><tbody>'+r.deductions.map(x=>'<tr><td>'+esc(fmtD(x.date))+'</td><td>'+esc(x.note)+'</td><td>'+(x.stale?'<span class="chip o">এখন উপস্থিত, গোনা হচ্ছে না</span>':pm(x.amount))+'</td><td>'+(ed?'<button class="btn" data-ud="'+esc(x.id)+'">তুলে নিন</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">কোনো কর্তন বসানো নেই।</p>')+
+    (ab.length?(ed?'<p>কর্তন লাগলে দিন বাছাই করুন (প্রতি দিনের কর্তন = বেতন ÷ ৩০):</p><div style="display:flex;flex-wrap:wrap;gap:4px 16px">'+ab.map(d=>'<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" data-ad="'+d+'"> '+esc(fmtD(d))+'</label>').join('')+'</div><div class="fld" style="margin-top:8px"><label for="dn">কারণ / নোট (আবশ্যক)</label><input id="dn" type="text" maxlength="200"></div><button class="btn pri" id="dGo2" style="margin-top:8px">বাছাই করা দিনে কর্তন বসান</button>':'<p class="muted">কর্তনহীন অনুপস্থিত দিন: '+ab.map(d=>bnd(+d.slice(8))).join(', ')+' তারিখ (এগুলোর বেতন কাটা হচ্ছে না)।</p>'):'<p class="muted">কর্তন করার মতো অনুপস্থিত দিন নেই।</p>')+
+    '<div style="margin-top:14px"><button class="btn" id="mClose">বন্ধ করুন</button></div>',true);
+  $('mClose').onclick=()=>m.close();
+  const reload=async()=>{ m.close(); await payrollPage(); payDetail(id); };
+  const err=e=>{ if(isAuthErr(e)) fail(e); else { const b=$('mMsg'); if(b){ b.textContent=errText(e); b.className='err'; } } };
+  const sm=$('pmSet'); if(sm) sm.onclick=async()=>{ const c=m.querySelector('input[name=pmode]:checked'); if(!c){ $('mMsg').textContent='একটি উপায় বাছাই করুন'; $('mMsg').className='err'; return; } try{ await api('payroll.setMode',{month:r.month,employee_id:id,mode:c.value}); await reload(); }catch(e){ err(e); } };
+  const dg=$('dGo2'); if(dg) dg.onclick=async()=>{ const ds=[...m.querySelectorAll('[data-ad]:checked')].map(x=>x.dataset.ad); try{ await api('payroll.deduct',{month:r.month,employee_id:id,dates:ds,note:$('dn').value}); await reload(); }catch(e){ err(e); } };
+  m.querySelectorAll('[data-ud]').forEach(b=>b.onclick=async()=>{ if(!confirm('এই কর্তন তুলে নেবেন?')) return; try{ await api('payroll.undeduct',{ded_id:b.dataset.ud}); await reload(); }catch(e){ err(e); } });
 }
 /* =====================================================================
  * Attendance (Phase 7, steps a and b): scan, day list, month view, manual entries
