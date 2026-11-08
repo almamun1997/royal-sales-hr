@@ -199,9 +199,11 @@
   }
 
   function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
-  function pdf(canvases, name) {
-    const doc = new jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-    canvases.forEach((c, i) => { if (i) doc.addPage('a4', 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
+  // fmt 'a6': each page is A6 (105 x 148 mm, a quarter of A4); otherwise A4
+  function pdf(canvases, name, fmt) {
+    const a6 = fmt === 'a6', pw = a6 ? 105 : 210, ph = a6 ? 148 : 297, f = a6 ? 'a6' : 'a4';
+    const doc = new jspdf.jsPDF({ unit: 'mm', format: f, orientation: 'portrait' });
+    canvases.forEach((c, i) => { if (i) doc.addPage(f, 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, ph); });
     saveBlob(doc.output('blob'), name);
   }
   // Puts the slips onto A4 pages: 1 per page, or 4 per page (2 x 2, each at exactly half size) with cut lines
