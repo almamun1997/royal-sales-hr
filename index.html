@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="idcard.js"></script>
-<script src="payslip.js?v=4"></script>
+<script src="payslip.js?v=5"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--blue:#283891;--navy:#0F1F4D;--orange:#F15A29;--ink:#0F172A;--mute:#5B6577;--line:#E3E7EF;--bg:#F4F6FA}
@@ -629,19 +629,19 @@ async function payslipPreview(ids,month){
     if(!D.rows.length){ alert('এই মাসের পে স্লিপ এখনও তৈরি হয়নি। হিসাব চূড়ান্ত হলে পাওয়া যাবে।'); return; }
     if(typeof PAYSLIP==='undefined'||!PAYSLIP.layout){ alert('পুরনো payslip.js লোড হয়েছে। নতুন payslip.js আপলোড করা আছে কি না দেখুন, তারপর Ctrl+Shift+R চাপুন।'); return; }
     const cans=[]; for(const s of D.rows) cans.push(await PAYSLIP.render(s,D.company,'logo.png'));
-    const multi=cans.length>1; let per=multi?4:1, pages=[];
-    const m=modal('<h2 style="margin-top:0">পে স্লিপ — '+esc(pmLabel(month))+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button></div>':'')+'<div id="psBox" style="max-height:62vh;overflow:auto;background:#EEF1F7;padding:12px;border-radius:12px;display:grid;gap:12px;justify-items:center"></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
+    const multi=cans.length>1; let per=multi?4:'a6', pages=[];
+    const m=modal('<h2 style="margin-top:0">পে স্লিপ — '+esc(pmLabel(month))+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button><button class="btn" id="psL6">A6 সাইজ, আলাদা পাতায়</button></div>':'')+'<div id="psBox" style="max-height:62vh;overflow:auto;background:#EEF1F7;padding:12px;border-radius:12px;display:grid;gap:12px;justify-items:center"></div><div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
     const box=m.querySelector('#psBox');
     const draw=()=>{
       pages=PAYSLIP.layout(cans,per); box.innerHTML='';
       pages.forEach(c=>{ c.style.cssText='width:min(100%,560px);height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)'; box.append(c); });
-      $('psInfo').textContent=bnd(cans.length)+'টি পে স্লিপ, '+bnd(pages.length)+' পাতার A4 PDF'+(per===4?' (প্রতি পাতায় ৪টি, মাঝে কাটার দাগ)':' (প্রতি পাতায় ১টি)')+'। দেখে নিয়ে PDF নামান।';
-      if(multi){ $('psL1').classList.toggle('pri',per===1); $('psL4').classList.toggle('pri',per===4); $('psL1').setAttribute('aria-pressed',per===1); $('psL4').setAttribute('aria-pressed',per===4); }
+      $('psInfo').textContent=bnd(cans.length)+'টি পে স্লিপ, '+bnd(pages.length)+' পাতার PDF'+(per===4?' (A4 পাতায় ৪টি, প্রতিটি A6 মাপের, মাঝে কাটার দাগ)':per==='a6'?' (প্রতিটি A6 সাইজের আলাদা পাতা)':' (A4 পাতায় ১টি)')+'। দেখে নিয়ে PDF নামান।';
+      if(multi){ $('psL1').classList.toggle('pri',per===1); $('psL4').classList.toggle('pri',per===4); $('psL6').classList.toggle('pri',per==='a6'); $('psL6').setAttribute('aria-pressed',per==='a6'); $('psL1').setAttribute('aria-pressed',per===1); $('psL4').setAttribute('aria-pressed',per===4); }
     };
     draw();
-    if(multi){ $('psL1').onclick=()=>{ per=1; draw(); }; $('psL4').onclick=()=>{ per=4; draw(); }; }
+    if(multi){ $('psL1').onclick=()=>{ per=1; draw(); }; $('psL4').onclick=()=>{ per=4; draw(); }; $('psL6').onclick=()=>{ per='a6'; draw(); }; }
     $('psClose').onclick=()=>m.close();
-    $('psPdf').onclick=()=>{ PAYSLIP.pdf(pages, D.rows.length===1 ? 'payslip_'+D.rows[0].employee_id+'_'+month+'.pdf' : 'payslips_'+month+(per===4?'_4up':'')+'.pdf'); };
+    $('psPdf').onclick=()=>{ PAYSLIP.pdf(pages, D.rows.length===1 ? 'payslip_'+D.rows[0].employee_id+'_'+month+'.pdf' : 'payslips_'+month+(per===4?'_4up':'')+'.pdf', per==='a6'?'a6':'a4'); };
   }catch(e){ if(isAuthErr(e)) fail(e); else alert(errText(e)); }
 }
 /* ---- everyone else: only their own payslip ---- */
@@ -760,19 +760,19 @@ async function bonusPreview(eidId,ids){
     if(!D.rows.length){ alert('রসিদ তৈরির মতো চূড়ান্ত বোনাস এখনও নেই।'); return; }
     if(typeof PAYSLIP==='undefined'||!PAYSLIP.renderBonus){ alert('পুরনো payslip.js লোড হয়েছে। নতুন payslip.js আপলোড করা আছে কি না দেখুন, তারপর Ctrl+Shift+R চাপুন।'); return; }
     const cans=[]; for(const s of D.rows) cans.push(await PAYSLIP.renderBonus(s,D.company,'logo.png'));
-    const multi=cans.length>1; let per=multi?4:1, pages=[];
-    const m=modal('<h2 style="margin-top:0">ঈদ বোনাস রসিদ — '+esc(D.eid.eid_name)+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button></div>':'')+'<div id="psBox" style="max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:12px;align-items:center;background:#EEF1F7;padding:12px;border-radius:10px"></div><div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
+    const multi=cans.length>1; let per=multi?4:'a6', pages=[];
+    const m=modal('<h2 style="margin-top:0">ঈদ বোনাস রসিদ — '+esc(D.eid.eid_name)+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button><button class="btn" id="psL6">A6 সাইজ, আলাদা পাতায়</button></div>':'')+'<div id="psBox" style="max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:12px;align-items:center;background:#EEF1F7;padding:12px;border-radius:10px"></div><div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
     const box=m.querySelector('#psBox');
     const draw=()=>{
       pages=PAYSLIP.layout(cans,per); box.innerHTML='';
       pages.forEach(c=>{ c.style.cssText='width:min(100%,560px);height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)'; box.append(c); });
-      $('psInfo').textContent=bnd(cans.length)+'টি রসিদ, '+bnd(pages.length)+' পাতার A4 PDF'+(per===4?' (প্রতি পাতায় ৪টি, মাঝে কাটার দাগ)':' (প্রতি পাতায় ১টি)')+'। দেখে নিয়ে PDF নামান।';
-      if(multi){ $('psL1').classList.toggle('pri',per===1); $('psL4').classList.toggle('pri',per===4); $('psL1').setAttribute('aria-pressed',per===1); $('psL4').setAttribute('aria-pressed',per===4); }
+      $('psInfo').textContent=bnd(cans.length)+'টি রসিদ, '+bnd(pages.length)+' পাতার PDF'+(per===4?' (A4 পাতায় ৪টি, প্রতিটি A6 মাপের, মাঝে কাটার দাগ)':per==='a6'?' (প্রতিটি A6 সাইজের আলাদা পাতা)':' (A4 পাতায় ১টি)')+'। দেখে নিয়ে PDF নামান।';
+      if(multi){ $('psL1').classList.toggle('pri',per===1); $('psL4').classList.toggle('pri',per===4); $('psL6').classList.toggle('pri',per==='a6'); $('psL6').setAttribute('aria-pressed',per==='a6'); $('psL1').setAttribute('aria-pressed',per===1); $('psL4').setAttribute('aria-pressed',per===4); }
     };
     draw();
-    if(multi){ $('psL1').onclick=()=>{ per=1; draw(); }; $('psL4').onclick=()=>{ per=4; draw(); }; }
+    if(multi){ $('psL1').onclick=()=>{ per=1; draw(); }; $('psL4').onclick=()=>{ per=4; draw(); }; $('psL6').onclick=()=>{ per='a6'; draw(); }; }
     $('psClose').onclick=()=>m.close();
-    $('psPdf').onclick=()=>{ PAYSLIP.pdf(pages, D.rows.length===1 ? 'eid_bonus_'+D.rows[0].employee_id+'_'+D.eid.eid_year+'.pdf' : 'eid_bonus_'+D.eid.eid_year+(per===4?'_4up':'')+'.pdf'); };
+    $('psPdf').onclick=()=>{ PAYSLIP.pdf(pages, D.rows.length===1 ? 'eid_bonus_'+D.rows[0].employee_id+'_'+D.eid.eid_year+'.pdf' : 'eid_bonus_'+D.eid.eid_year+(per===4?'_4up':'')+'.pdf', per==='a6'?'a6':'a4'); };
   }catch(e){ if(isAuthErr(e)) fail(e); else alert(errText(e)); }
 }
 /* ---- everyone else: only their own bonus ---- */
