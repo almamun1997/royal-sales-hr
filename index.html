@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="idcard.js"></script>
+<script src="i18n.js?v=1"></script>
 <script src="payslip.js?v=6"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -15,7 +16,7 @@
 body{margin:0;font-family:'Noto Sans Bengali','Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 a{color:var(--blue)}
 .hide{display:none!important}
-#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+#login{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
 .box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px;max-width:380px;width:100%;text-align:center}
 .box h1{margin:12px 0 4px;font-size:22px;color:var(--blue)}
 .box p{color:var(--mute);font-size:14px;margin:0 0 20px}
@@ -803,8 +804,8 @@ async function myEidPage(){
 /* =====================================================================
  * Phase 10 and 11: advances/loans, cash book, reviews and warnings, notices
  * ===================================================================== */
-const CASHCAT={ sales:'বিক্রি', service:'সার্ভিস', income_other:'অন্যান্য আয়', opening:'শুরুর জমা', loan_repay:'অগ্রিম/ধার ফেরত (নগদে)', rent:'ভাড়া', electricity:'বিদ্যুৎ বিল', expense_other:'অন্যান্য খরচ', handover:'মালিককে হস্তান্তর', bank_deposit:'ব্যাংকে জমা', salary:'বেতন', bonus:'ঈদ বোনাস', advance_loan:'অগ্রিম/ধার প্রদান' };
-const CASH_MAN_IN=['sales','service','income_other','opening'], CASH_MAN_OUT=['rent','electricity','expense_other','handover','bank_deposit'];
+const CASHCAT={ sales:'বিক্রি', service:'সার্ভিস', income_other:'অন্যান্য আয়', opening:'শুরুর জমা', loan_repay:'অগ্রিম/ধার ফেরত (নগদে)', rent:'ভাড়া', electricity:'বিদ্যুৎ বিল', expense_other:'অন্যান্য খরচ', handover:'মালিককে হস্তান্তর', bank_deposit:'ব্যাংকে জমা', salary:'বেতন', bonus:'ঈদ বোনাস', advance_loan:'অগ্রিম/ধার প্রদান', supplier:'কোম্পানি/ডিলারকে পেমেন্ট (পণ্যের দাম)' };
+const CASH_MAN_IN=['sales','service','income_other','opening'], CASH_MAN_OUT=['supplier','rent','electricity','expense_other','handover','bank_deposit'];
 const eyeLine=(label)=>'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span>'+(label||'')+'</div>';
 function eyeBind(root,hash,redraw){ const b=root.querySelector('[data-eye="pay"]'); if(b) b.onclick=()=>{ PAYS.shown=!PAYS.shown; if(PAYS.shown) autoHide(()=>{ PAYS.shown=false; if(location.hash===hash) redraw(); }); redraw(); }; }
 const showErr=(id,e)=>{ if(isAuthErr(e)) return fail(e); const b=$(id); if(b){ b.textContent=errText(e); b.className='err'; } else alert(errText(e)); };
@@ -881,15 +882,16 @@ function cashDayDraw(){
     '<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px"><div><div class="muted">শুরুর ব্যালেন্স</div><b>'+pm(D.opening)+'</b></div><div><div class="muted">মোট জমা</div><b>'+pm(D.total_in)+'</b></div><div><div class="muted">মোট খরচ</div><b>'+pm(D.total_out)+'</b></div><div><div class="muted">শেষের ব্যালেন্স</div><b>'+pm(D.closing)+'</b></div></div>'+
     (cur?'<div class="card" style="box-shadow:none;border:1px solid var(--line)"><b>বাস্তব নগদ: '+pm(cur.counted)+'</b>'+(Math.abs(cur.difference)>0.004?' · <span class="chip o">অমিল '+pm(cur.difference)+'</span> '+esc(cur.explanation||''):' · <span class="chip">হিসাব মিলেছে</span>')+(cur.stale?'<div class="err" style="margin-top:8px">দিন বন্ধের পরে হিসাব বদলেছে। দিন খুলে আবার বন্ধ করুন।</div>':'')+(ed?'<div style="margin-top:8px"><button class="btn" id="cOpen">দিন খুলুন</button></div>':'')+'</div>':'')+
     '<div class="tw"><table><thead><tr><th>খাত</th><th>বিবরণ</th><th>জমা</th><th>খরচ</th><th></th></tr></thead><tbody>'+
-    (D.entries.length?D.entries.map(e=>'<tr><td>'+esc(CASHCAT[e.category]||e.category)+(e.auto?' <span class="muted">(নিজে থেকে)</span>':'')+'</td><td>'+esc(e.description||'')+'</td><td>'+(e.direction==='In'?pm(e.amount):'')+'</td><td>'+(e.direction==='Out'?pm(e.amount):'')+'</td><td>'+(ed&&!closed&&!e.auto?'<button class="btn" data-cv="'+esc(e.txn_id)+'">বাতিল</button>':'')+'</td></tr>').join(''):'<tr><td colspan="5" class="muted">এই দিনে কোনো এন্ট্রি নেই।</td></tr>')+'</tbody></table></div>'+
-    (ed&&!closed?'<h3>নতুন এন্ট্রি</h3><div class="grid"><div class="fld"><label for="ca_c">খাত</label><select id="ca_c"><optgroup label="জমা">'+CASH_MAN_IN.map(k=>'<option value="'+k+'">'+CASHCAT[k]+'</option>').join('')+'</optgroup><optgroup label="খরচ">'+CASH_MAN_OUT.map(k=>'<option value="'+k+'">'+CASHCAT[k]+'</option>').join('')+'</optgroup></select></div><div class="fld"><label for="ca_a">টাকা</label><input id="ca_a" type="text" inputmode="decimal" autocomplete="off"></div><div class="fld"><label for="ca_d">বিবরণ</label><input id="ca_d" type="text" maxlength="200"></div></div><div style="margin-top:8px"><button class="btn pri" id="caGo">যোগ করুন</button></div>':'')+
+    (D.entries.length?D.entries.map(e=>'<tr><td>'+esc(CASHCAT[e.category]||e.category)+(e.auto?' <span class="muted">(নিজে থেকে)</span>':'')+'</td><td>'+(e.party?'<b>'+esc(e.party)+'</b>'+(e.description?' — ':''):'')+esc(e.description||'')+'</td><td>'+(e.direction==='In'?pm(e.amount):'')+'</td><td>'+(e.direction==='Out'?pm(e.amount):'')+'</td><td>'+(ed&&!closed&&!e.auto?'<button class="btn" data-cv="'+esc(e.txn_id)+'">বাতিল</button>':'')+'</td></tr>').join(''):'<tr><td colspan="5" class="muted">এই দিনে কোনো এন্ট্রি নেই।</td></tr>')+'</tbody></table></div>'+
+    (ed&&!closed?'<h3>নতুন এন্ট্রি</h3><div class="grid"><div class="fld"><label for="ca_c">খাত</label><select id="ca_c"><optgroup label="জমা">'+CASH_MAN_IN.map(k=>'<option value="'+k+'">'+CASHCAT[k]+'</option>').join('')+'</optgroup><optgroup label="খরচ">'+CASH_MAN_OUT.map(k=>'<option value="'+k+'">'+CASHCAT[k]+'</option>').join('')+'</optgroup></select></div><div class="fld" id="ca_pw" style="display:none"><label for="ca_p">কোম্পানি / ডিলারের নাম</label><input id="ca_p" type="text" list="ca_pl" maxlength="100" autocomplete="off"><datalist id="ca_pl">'+(D.parties||[]).map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist></div><div class="fld"><label for="ca_a">টাকা</label><input id="ca_a" type="text" inputmode="decimal" autocomplete="off"></div><div class="fld"><label for="ca_d">বিবরণ</label><input id="ca_d" type="text" maxlength="200"></div></div><div style="margin-top:8px"><button class="btn pri" id="caGo">যোগ করুন</button></div>':'')+
     (ed&&!closed?'<h3>দিন বন্ধ করুন</h3><p class="muted">ড্রয়ারে বাস্তবে যত টাকা আছে গুনে লিখুন। হিসাবের সঙ্গে না মিললে কারণ লিখতে হবে।</p><div class="grid"><div class="fld"><label for="cc_a">বাস্তব নগদ</label><input id="cc_a" type="text" inputmode="decimal" autocomplete="off"></div><div class="fld"><label for="cc_e">অমিলের কারণ (অমিল থাকলে)</label><input id="cc_e" type="text" maxlength="300"></div></div><div style="margin-top:8px"><button class="btn pri" id="ccGo">দিন বন্ধ করুন</button></div>':'');
   eyeBind(B,'#/cash',cashDraw);
   const go=async(fn)=>{ try{ await fn(); await cashPage(); }catch(e){ showErr('cMsg',e); window.scrollTo(0,0); } };
   $('cDate').onchange=()=>{ if($('cDate').value){ CASH.date=$('cDate').value; cashPage(); } };
   $('cPrev').onclick=()=>{ CASH.date=addDays(D.date,-1); cashPage(); };
   $('cNext').onclick=()=>{ CASH.date=addDays(D.date,1); cashPage(); };
-  const a=$('caGo'); if(a) a.onclick=()=>go(()=>api('cash.add',{date:D.date,category:$('ca_c').value,amount:digitsEn($('ca_a').value),description:$('ca_d').value}));
+  const cc=$('ca_c'); if(cc) cc.onchange=()=>{ $('ca_pw').style.display=cc.value==='supplier'?'':'none'; };
+  const a=$('caGo'); if(a) a.onclick=()=>go(()=>api('cash.add',{date:D.date,category:$('ca_c').value,amount:digitsEn($('ca_a').value),description:$('ca_d').value,party:$('ca_p').value}));
   B.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{ const why=prompt('বাতিলের কারণ লিখুন'); if(why===null) return; go(()=>api('cash.void',{txn_id:b.dataset.cv,reason:why})); });
   const c=$('ccGo'); if(c) c.onclick=()=>go(()=>api('cash.close',{date:D.date,counted:digitsEn($('cc_a').value),explanation:$('cc_e').value}));
   const o=$('cOpen'); if(o) o.onclick=()=>{ const why=prompt('দিন খোলার কারণ লিখুন (আবশ্যক)'); if(why===null) return; go(()=>api('cash.reopen',{date:D.date,reason:why})); };
@@ -899,6 +901,7 @@ function cashMonDraw(){
   B.innerHTML=eyeLine()+'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><button class="btn" id="cmPrev" aria-label="আগের মাস">‹</button><b style="min-width:150px;text-align:center;font-size:18px">'+esc(pmLabel(D.month))+'</b><button class="btn" id="cmNext" aria-label="পরের মাস"'+(D.month>=cur?' disabled':'')+'>›</button></div>'+
     '<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px"><div><div class="muted">মাসের শুরুতে</div><b>'+pm(D.opening)+'</b></div><div><div class="muted">মোট জমা</div><b>'+pm(D.total_in)+'</b></div><div><div class="muted">মোট খরচ</div><b>'+pm(D.total_out)+'</b></div><div><div class="muted">মাসের শেষে</div><b>'+pm(D.closing)+'</b></div></div>'+
     '<h3>খাত অনুযায়ী</h3><div class="tw"><table><thead><tr><th>খাত</th><th>জমা</th><th>খরচ</th></tr></thead><tbody>'+(D.categories.length?D.categories.map(c=>'<tr><td>'+esc(CASHCAT[c.category]||c.category)+'</td><td>'+(c.direction==='In'?pm(c.amount):'')+'</td><td>'+(c.direction==='Out'?pm(c.amount):'')+'</td></tr>').join(''):'<tr><td colspan="3" class="muted">এই মাসে কোনো এন্ট্রি নেই।</td></tr>')+'</tbody></table></div>'+
+    (D.suppliers&&D.suppliers.length?'<h3>কোম্পানি/ডিলার অনুযায়ী পেমেন্ট</h3><div class="tw"><table><thead><tr><th>কোম্পানি</th><th>মোট পেমেন্ট</th></tr></thead><tbody>'+D.suppliers.map(x=>'<tr><td>'+esc(x.party)+'</td><td>'+pm(x.amount)+'</td></tr>').join('')+'</tbody></table></div>':'')+
     '<h3>দিন অনুযায়ী</h3><div class="tw"><table><thead><tr><th>তারিখ</th><th>জমা</th><th>খরচ</th><th>দিন বন্ধ</th><th></th></tr></thead><tbody>'+(D.days.length?D.days.map(d=>'<tr><td>'+esc(fmtD(d.date))+'</td><td>'+pm(d.in)+'</td><td>'+pm(d.out)+'</td><td>'+(d.closed?'<span class="chip">বন্ধ</span>'+(Math.abs(d.difference)>0.004?' <span class="chip o">অমিল '+pm(d.difference)+'</span>':''):'<span class="chip o">খোলা</span>')+'</td><td><button class="btn" data-cd="'+d.date+'">দেখুন</button></td></tr>').join(''):'<tr><td colspan="5" class="muted">কোনো দিনে এন্ট্রি নেই।</td></tr>')+'</tbody></table></div>';
   eyeBind(B,'#/cash',cashDraw);
   $('cmPrev').onclick=()=>{ CASH.month=pmShift(D.month,-1); cashPage(); };
