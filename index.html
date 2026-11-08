@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="idcard.js"></script>
-<script src="payslip.js?v=3"></script>
+<script src="payslip.js?v=4"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--blue:#283891;--navy:#0F1F4D;--orange:#F15A29;--ink:#0F172A;--mute:#5B6577;--line:#E3E7EF;--bg:#F4F6FA}
@@ -113,7 +113,7 @@ button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
     <div class="brand"><div class="lg"><img src="logo.png" alt="" onerror="this.style.display='none'"></div><div><b>Royal Sales</b><small>HR ও বেতন ব্যবস্থাপনা</small></div></div>
     <a class="soon" href="#">ড্যাশবোর্ড</a><a id="navAtt" href="#/attendance">হাজিরা</a>
     <a id="navEmp" href="#/employees">কর্মচারী</a>
-    <a id="navLeave" href="#/leave">ছুটি</a><a id="navPay" class="hide" href="#/payroll">বেতন</a><a class="soon" href="#">ঈদ বোনাস</a>
+    <a id="navLeave" href="#/leave">ছুটি</a><a id="navPay" class="hide" href="#/payroll">বেতন</a><a id="navEid" class="hide" href="#/eid">ঈদ বোনাস</a>
     <a class="soon" href="#">অগ্রিম ও ধার</a><a class="soon" href="#">নগদ হিসাব</a>
     <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
     <a id="navDes" class="hide" href="#/designations">পদবী</a>
@@ -165,6 +165,8 @@ async function start(){
     $('meRole').textContent = (ROLE[ME.role] || ME.role)+(ME.can.delegate?' · সুপার অ্যাডমিন ক্ষমতাসহ':'');
     $('navUsers').classList.toggle('hide', !ME.can.sa);
     $('navPay').classList.remove('hide'); $('navPay').textContent=(ME.can.sa||ME.role==='Owner')?'বেতন':'আমার পে স্লিপ';
+    $('navEid').onclick=()=>{ EID.sel=''; if(location.hash==='#/eid') setTimeout(route,0); };
+    $('navEid').classList.remove('hide'); $('navEid').textContent=(ME.can.sa||ME.role==='Owner')?'ঈদ বোনাস':'আমার ঈদ বোনাস';
     $('navDes').classList.toggle('hide', !ME.can.sa);
     $('navCards').classList.toggle('hide', !ME.can.sa);
     $('navCo').classList.toggle('hide', !ME.can.sa);
@@ -209,6 +211,7 @@ function route(){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
   const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
+  if(h==='#/eid'){ $('navEid').classList.add('on'); eidPage(); return; }
   if(h==='#/payroll'){ $('navPay').classList.add('on'); payrollPage(); return; }
   if(h==='#/leave'){ $('navLeave').classList.add('on'); leavePage(); return; }
   if(h==='#/attendance'){ $('navAtt').classList.add('on'); attendancePage(); return; }
@@ -655,6 +658,134 @@ async function mySlipPage(){
     const b=$('mSlip'); if(b) b.onclick=()=>payslipPreview(null,PAYS.month);
   }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">আমার পে স্লিপ</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
 }
+/*EID_BEGIN*/
+/* =====================================================================
+ * Eid bonus (Phase 9): Eid list, eligibility table, owner decisions, finalize, pay, receipts
+ * ===================================================================== */
+const EID={ sel:'', data:null };
+const EID_NAMES=['ঈদুল ফিতর','ঈদুল আযহা'];
+const EID_ST={ None:['বোনাস নেই',0], Draft:['খসড়া',1], Finalized:['চূড়ান্ত — পরিশোধ বাকি',1], Paid:['পরিশোধিত',0] };
+async function eidPage(){
+  if(!(ME.can.sa||ME.role==='Owner')) return myEidPage();
+  if(EID.sel) return eidDetail();
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const D=await api('eid.list',{});
+    v.innerHTML='<h1 class="t">ঈদ বোনাস</h1><div class="sub">ঈদের নাম ও তারিখ দিয়ে বোনাসের হিসাব তৈরি হয়। বোনাস = মাসিক বেতনের ৫০%, ঈদের ৫ দিন আগে একবারে নগদে। ঈদের দিন কর্মরত ও ১ বছর সেবা পূর্ণ হলে যোগ্য।</div><div id="eMsg" role="alert"></div>'+
+      '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span>'+(D.can_edit?'<button class="btn pri" id="eAdd" style="margin-left:auto">+ নতুন ঈদ যোগ করুন</button>':'')+'</div>'+
+      '<div class="tw"><table><thead><tr><th>ঈদ</th><th>ঈদের তারিখ</th><th>পরিশোধের তারিখ</th><th>চূড়ান্ত</th><th>মোট বোনাস</th><th>পরিশোধিত</th><th></th></tr></thead><tbody>'+
+      (D.rows.length?D.rows.map(r=>'<tr><td style="font-weight:600">'+esc(r.eid_name)+' '+bnd(r.eid_date.slice(0,4))+'</td><td>'+esc(fmtD(r.eid_date))+'</td><td>'+esc(fmtD(r.pay_due_date))+'</td><td>'+(r.locked?bnd(r.locked)+' জন':'—')+'</td><td>'+(r.locked?pm(r.total):'—')+'</td><td>'+(r.locked?pm(r.paid):'—')+'</td><td><button class="btn" data-eo="'+esc(r.eid_id)+'">খুলুন</button></td></tr>').join(''):'<tr><td colspan="7" class="muted">এখনও কোনো ঈদ যোগ করা হয়নি।'+(D.can_edit?' "নতুন ঈদ যোগ করুন" চাপুন।':'')+'</td></tr>')+
+      '</tbody></table></div></div>';
+    v.querySelector('[data-eye="pay"]').onclick=()=>{ PAYS.shown=!PAYS.shown; if(PAYS.shown) autoHide(()=>{ PAYS.shown=false; if(location.hash==='#/eid') eidPage(); }); eidPage(); };
+    v.querySelectorAll('[data-eo]').forEach(b=>b.onclick=()=>{ EID.sel=b.dataset.eo; eidDetail(); });
+    const a=$('eAdd'); if(a) a.onclick=()=>eidForm(null);
+  }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">ঈদ বোনাস</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
+}
+function eidForm(cur){
+  const known=cur&&EID_NAMES.includes(cur.eid_name), pick=cur?(known?cur.eid_name:'__other'):EID_NAMES[0];
+  const m=modal('<h2 style="margin-top:0">'+(cur?'ঈদের তথ্য বদলান':'নতুন ঈদ')+'</h2><div id="fMsg" role="alert"></div><div class="grid">'+
+    '<div class="fld"><label for="fn">ঈদের নাম</label><select id="fn">'+EID_NAMES.map(n=>'<option'+(pick===n?' selected':'')+'>'+n+'</option>').join('')+'<option value="__other"'+(pick==='__other'?' selected':'')+'>অন্য নাম</option></select></div>'+
+    '<div class="fld" id="fo" style="'+(pick==='__other'?'':'display:none')+'"><label for="fon">নিজে লিখুন</label><input id="fon" type="text" maxlength="60" value="'+esc(cur&&!known?cur.eid_name:'')+'"></div>'+
+    '<div class="fld"><label for="fd">ঈদের তারিখ</label><input id="fd" type="date" value="'+esc(cur?cur.eid_date:'')+'"></div></div>'+
+    '<p class="muted">পরিশোধের তারিখ নিজে থেকেই ঈদের ৫ দিন আগে ধরা হবে। চাঁদ দেখা অনুযায়ী তারিখ বদলালে এখানে ঠিক করে নিতে পারবেন (চূড়ান্ত হওয়ার আগে)।</p>'+
+    '<div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="fGo">সংরক্ষণ করুন</button><button class="btn" id="fX">বাতিল</button></div>');
+  $('fX').onclick=()=>m.close();
+  $('fn').onchange=()=>{ $('fo').style.display=$('fn').value==='__other'?'':'none'; };
+  $('fGo').onclick=async()=>{
+    const name=$('fn').value==='__other'?$('fon').value:$('fn').value;
+    try{ const r=await api('eid.save',{eid_id:cur?cur.eid_id:undefined,name:name,date:$('fd').value}); m.close(); EID.sel=r.eid_id; eidDetail(); }
+    catch(e){ if(isAuthErr(e)) fail(e); else { const b=$('fMsg'); b.textContent=errText(e); b.className='err'; } }
+  };
+}
+async function eidDetail(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const D=await api('eid.view',{eid_id:EID.sel}); EID.data=D; eidDraw();
+  }catch(e){ if(isAuthErr(e)) fail(e); else { EID.sel=''; v.innerHTML='<h1 class="t">ঈদ বোনাস</h1><div class="err" role="alert">'+esc(errText(e))+'</div><p><button class="btn" id="eBk">← ঈদের তালিকা</button></p>'; $('eBk').onclick=()=>eidPage(); } }
+}
+function eidDraw(){
+  const D=EID.data, E=D.eid, v=$('view'), ed=D.can_edit, T=D.totals;
+  const lockedN=D.rows.filter(r=>r.status==='Finalized'||r.status==='Paid').length;
+  const flag=r=>{ const s=EID_ST[r.status]; return '<span class="chip'+(s[1]?' o':'')+'">'+s[0]+'</span>'; };
+  const elig=r=>r.eligible?'<span class="chip">যোগ্য</span>'+(r.source==='owner_discretion'?' <span class="muted">(মালিকের সিদ্ধান্ত)</span>':''):'<span class="chip o">অযোগ্য</span> <span class="muted">'+esc(r.reason_text||'')+(r.reason==='under_1y'&&r.one_year_on?' ('+esc(fmtD(r.one_year_on))+' এ ১ বছর হবে)':'')+'</span>';
+  v.innerHTML='<p><button class="btn" id="eBk">← ঈদের তালিকা</button></p><h1 class="t">'+esc(E.eid_name)+' '+bnd(E.eid_year)+'</h1><div class="sub">ঈদের তারিখ: '+esc(fmtD(E.eid_date))+' · পরিশোধের তারিখ (৫ দিন আগে): '+esc(fmtD(E.pay_due_date))+'</div><div id="eMsg" role="alert"></div>'+
+    '<div class="card"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'+eyeBtn('pay',PAYS.shown,PAYS.shown?'অঙ্ক লুকান':'অঙ্ক দেখুন')+'<span class="muted">'+(PAYS.shown?'অঙ্ক দেখা যাচ্ছে (১ মিনিট পর নিজে লুকাবে)':'অঙ্ক লুকানো আছে')+'</span>'+
+      '<span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">'+(ed?'<button class="btn" id="eEdit">তারিখ/নাম বদলান</button>'+(lockedN?'':'<button class="btn" id="eDel" style="border-color:#9B1C1C;color:#9B1C1C">ঈদ মুছুন</button>'):'')+'<button class="btn" id="eAllR">সব রসিদ (PDF)</button></span></div>'+
+    (ed&&T.draft>0?'<div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn pri" id="eFin">বোনাস চূড়ান্ত করুন ('+bnd(T.draft)+' জন)</button><span class="muted">চূড়ান্ত হলে বোনাসের অঙ্ক আর বদলাবে না (পরে বেতন বদলালেও)। ভুল পেলে কারণ লিখে খোলা যাবে।</span></div>':'')+
+    '<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px"><div><div class="muted">যোগ্য</div><b>'+bnd(T.eligible)+' জন</b></div><div><div class="muted">মোট বোনাস</div><b>'+pm(T.total)+'</b></div><div><div class="muted">পরিশোধিত</div><b>'+pm(T.paid)+'</b></div><div><div class="muted">বাকি</div><b>'+(T.due?pm(T.due):'—')+'</b></div></div>'+
+    '<div class="tw"><table><thead><tr><th>নাম</th><th>যোগদান</th><th>মাসিক বেতন</th><th>যোগ্যতা</th><th>বোনাস</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+
+    D.rows.map(r=>{ const lk=r.status==='Finalized'||r.status==='Paid'; let act='';
+      if(r.mode==='Discretionary'&&ed&&!lk) act+='<button class="btn" data-dc="'+esc(r.employee_id)+'">সিদ্ধান্ত</button> ';
+      if(ed&&r.status==='Finalized') act+='<button class="btn pri" data-pay="'+esc(r.employee_id)+'">পরিশোধ</button> <button class="btn" data-re="'+esc(r.employee_id)+'">খুলুন</button> ';
+      if(ed&&r.status==='Paid') act+='<button class="btn" data-up="'+esc(r.employee_id)+'">পরিশোধ বাতিল</button> ';
+      if(lk) act+='<button class="btn" data-rc="'+esc(r.employee_id)+'">রসিদ</button>';
+      return '<tr><td style="font-weight:600">'+esc(r.name_bn)+'<div class="muted" style="font-weight:400">'+esc(r.designation)+(r.mode==='Discretionary'?' · মালিক':'')+'</div></td><td>'+(r.joining_date?esc(fmtD(r.joining_date)):'<span class="chip o">নেই</span>')+'</td><td>'+(r.salary?pm(r.salary):'—')+'</td><td>'+elig(r)+'</td><td style="font-weight:700">'+(r.eligible?pm(r.amount):'—')+(r.eligible&&r.percent?'<div class="muted" style="font-weight:400">'+bnd(r.percent)+'%</div>':'')+'</td><td>'+(r.status==='None'?'—':flag(r))+(r.paid_date?'<div class="muted">'+esc(fmtD(r.paid_date))+'</div>':'')+'</td><td style="white-space:nowrap">'+act+'</td></tr>'; }).join('')+
+    '</tbody></table></div><div class="muted" style="margin-top:12px">বোনাস = বোনাস তৈরির দিনের সর্বশেষ মাসিক বেতনের ৫০%। কর্তন বা অনুপস্থিতিতে কমে না। ঈদের আগে চাকরি ছেড়ে গেলে বা বরখাস্ত হলে বোনাস নেই।</div></div>';
+  const err=e=>{ if(isAuthErr(e)) fail(e); else { const b=$('eMsg'); b.textContent=errText(e); b.className='err'; window.scrollTo(0,0); } };
+  const reload=()=>eidDetail();
+  $('eBk').onclick=()=>{ EID.sel=''; eidPage(); };
+  v.querySelector('[data-eye="pay"]').onclick=()=>{ PAYS.shown=!PAYS.shown; if(PAYS.shown) autoHide(()=>{ PAYS.shown=false; if(location.hash==='#/eid'&&EID.data) eidDraw(); }); eidDraw(); };
+  const a=$('eEdit'); if(a) a.onclick=()=>eidForm(E);
+  const d=$('eDel'); if(d) d.onclick=async()=>{ if(!confirm('এই ঈদ মুছে ফেলবেন?')) return; try{ await api('eid.void',{eid_id:E.eid_id}); EID.sel=''; eidPage(); }catch(e){ err(e); } };
+  const f=$('eFin'); if(f) f.onclick=async()=>{ if(!confirm(bnd(T.draft)+' জনের বোনাস চূড়ান্ত করবেন? অঙ্ক এখনকার বেতন অনুযায়ী পাকা হয়ে যাবে।')) return; try{ await api('eid.finalize',{eid_id:E.eid_id}); reload(); }catch(e){ err(e); } };
+  $('eAllR').onclick=()=>bonusPreview(E.eid_id,null);
+  v.querySelectorAll('[data-rc]').forEach(b=>b.onclick=()=>bonusPreview(E.eid_id,[b.dataset.rc]));
+  v.querySelectorAll('[data-dc]').forEach(b=>b.onclick=()=>eidDecide(b.dataset.dc));
+  v.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>eidPayForm(b.dataset.pay));
+  v.querySelectorAll('[data-re]').forEach(b=>b.onclick=async()=>{ const why=prompt('বোনাস খোলার কারণ লিখুন (আবশ্যক)'); if(why===null) return; try{ await api('eid.reopen',{eid_id:E.eid_id,employee_id:b.dataset.re,reason:why}); reload(); }catch(e){ err(e); } });
+  v.querySelectorAll('[data-up]').forEach(b=>b.onclick=async()=>{ const why=prompt('পরিশোধ বাতিলের কারণ লিখুন'); if(why===null) return; try{ await api('eid.unpay',{eid_id:E.eid_id,employee_id:b.dataset.up,reason:why}); reload(); }catch(e){ err(e); } });
+}
+function eidDecide(id){
+  const D=EID.data, r=D.rows.find(x=>x.employee_id===id);
+  const m=modal('<h2 style="margin-top:0">'+esc(r.name_bn)+' — '+esc(D.eid.eid_name)+' বোনাস</h2><div id="dMsg" role="alert"></div><p class="muted">মালিকের বোনাস প্রতি ঈদে আলাদা করে ঠিক করা হয়। প্রতিটি সিদ্ধান্ত লগে থাকে।</p>'+
+    '<label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" id="dTk"'+(r.takes?' checked':'')+'> এবার বোনাস নেবেন</label>'+
+    '<div class="fld" id="dAmW" style="'+(r.takes?'':'display:none')+'"><label for="dAm">বোনাসের টাকা</label><input id="dAm" type="text" inputmode="decimal" autocomplete="off" value="'+(r.dec_amount?esc(String(r.dec_amount)):'')+'"></div>'+
+    '<div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="dGo">সংরক্ষণ করুন</button><button class="btn" id="dX">বাতিল</button></div>');
+  $('dX').onclick=()=>m.close();
+  $('dTk').onchange=()=>{ $('dAmW').style.display=$('dTk').checked?'':'none'; };
+  $('dGo').onclick=async()=>{ try{ await api('eid.decide',{eid_id:D.eid.eid_id,employee_id:id,takes:$('dTk').checked,amount:digitsEn($('dAm').value||'0')}); m.close(); eidDetail(); }catch(e){ if(isAuthErr(e)) fail(e); else { const b=$('dMsg'); b.textContent=errText(e); b.className='err'; } } };
+}
+function eidPayForm(id){
+  const D=EID.data, r=D.rows.find(x=>x.employee_id===id);
+  const m=modal('<h2 style="margin-top:0">'+esc(r.name_bn)+' — বোনাস পরিশোধ</h2><div id="pMsg2" role="alert"></div><p>বোনাস: <b>'+esc(mk(r.amount))+'</b> (একবারে নগদে পুরোটা)</p>'+
+    '<div class="fld"><label for="bpd">পরিশোধের তারিখ</label><input id="bpd" type="date" value="'+todayStr()+'" max="'+todayStr()+'"></div>'+
+    '<div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="bpGo">পরিশোধ হয়েছে — নথিভুক্ত করুন</button><button class="btn" id="bpX">বাতিল</button></div>');
+  $('bpX').onclick=()=>m.close();
+  $('bpGo').onclick=async()=>{ try{ await api('eid.pay',{eid_id:D.eid.eid_id,employee_id:id,date:$('bpd').value}); m.close(); eidDetail(); }catch(e){ if(isAuthErr(e)) fail(e); else { const b=$('pMsg2'); b.textContent=errText(e); b.className='err'; } } };
+}
+/* ---- receipts: preview, then PDF ---- */
+async function bonusPreview(eidId,ids){
+  try{
+    const D=await api('eid.slips',{eid_id:eidId,employee_ids:ids||undefined});
+    if(!D.rows.length){ alert('রসিদ তৈরির মতো চূড়ান্ত বোনাস এখনও নেই।'); return; }
+    if(typeof PAYSLIP==='undefined'||!PAYSLIP.renderBonus){ alert('পুরনো payslip.js লোড হয়েছে। নতুন payslip.js আপলোড করা আছে কি না দেখুন, তারপর Ctrl+Shift+R চাপুন।'); return; }
+    const cans=[]; for(const s of D.rows) cans.push(await PAYSLIP.renderBonus(s,D.company,'logo.png'));
+    const multi=cans.length>1; let per=multi?4:1, pages=[];
+    const m=modal('<h2 style="margin-top:0">ঈদ বোনাস রসিদ — '+esc(D.eid.eid_name)+'</h2><p class="muted" id="psInfo"></p>'+(multi?'<div role="group" aria-label="পাতার বিন্যাস" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="psL1">প্রতি পাতায় ১টি</button><button class="btn" id="psL4">প্রতি পাতায় ৪টি</button></div>':'')+'<div id="psBox" style="max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:12px;align-items:center;background:#EEF1F7;padding:12px;border-radius:10px"></div><div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="psPdf">PDF নামান</button><button class="btn" id="psClose">বন্ধ করুন</button></div>',true);
+    const box=m.querySelector('#psBox');
+    const draw=()=>{
+      pages=PAYSLIP.layout(cans,per); box.innerHTML='';
+      pages.forEach(c=>{ c.style.cssText='width:min(100%,560px);height:auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)'; box.append(c); });
+      $('psInfo').textContent=bnd(cans.length)+'টি রসিদ, '+bnd(pages.length)+' পাতার A4 PDF'+(per===4?' (প্রতি পাতায় ৪টি, মাঝে কাটার দাগ)':' (প্রতি পাতায় ১টি)')+'। দেখে নিয়ে PDF নামান।';
+      if(multi){ $('psL1').classList.toggle('pri',per===1); $('psL4').classList.toggle('pri',per===4); $('psL1').setAttribute('aria-pressed',per===1); $('psL4').setAttribute('aria-pressed',per===4); }
+    };
+    draw();
+    if(multi){ $('psL1').onclick=()=>{ per=1; draw(); }; $('psL4').onclick=()=>{ per=4; draw(); }; }
+    $('psClose').onclick=()=>m.close();
+    $('psPdf').onclick=()=>{ PAYSLIP.pdf(pages, D.rows.length===1 ? 'eid_bonus_'+D.rows[0].employee_id+'_'+D.eid.eid_year+'.pdf' : 'eid_bonus_'+D.eid.eid_year+(per===4?'_4up':'')+'.pdf'); };
+  }catch(e){ if(isAuthErr(e)) fail(e); else alert(errText(e)); }
+}
+/* ---- everyone else: only their own bonus ---- */
+async function myEidPage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    const D=await api('eid.mine',{});
+    v.innerHTML='<h1 class="t">আমার ঈদ বোনাস</h1><div class="sub">বোনাস চূড়ান্ত হওয়ার পর এখানে দেখা যাবে ও রসিদ নামানো যাবে।</div><div class="card">'+
+      (D.rows.length?'<div class="tw"><table><thead><tr><th>ঈদ</th><th>ঈদের তারিখ</th><th>বোনাস</th><th>অবস্থা</th><th></th></tr></thead><tbody>'+D.rows.map(r=>'<tr><td style="font-weight:600">'+esc(r.eid_name)+' '+bnd(r.eid_date.slice(0,4))+'</td><td>'+esc(fmtD(r.eid_date))+'</td><td>'+esc(mk(r.amount))+'</td><td>'+(r.status==='Paid'?'<span class="chip">পরিশোধিত</span><div class="muted">'+esc(fmtD(r.paid_date))+'</div>':'<span class="chip o">পরিশোধ বাকি</span><div class="muted">নির্ধারিত: '+esc(fmtD(r.pay_due_date))+'</div>')+'</td><td><button class="btn" data-mr="'+esc(r.eid_id)+'">রসিদ</button></td></tr>').join('')+'</tbody></table></div>':'<p class="muted">এখনও কোনো ঈদ বোনাস চূড়ান্ত হয়নি।</p>')+'</div>';
+    v.querySelectorAll('[data-mr]').forEach(b=>b.onclick=()=>bonusPreview(b.dataset.mr,null));
+  }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">আমার ঈদ বোনাস</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
+}
+/*EID_END*/
 /* =====================================================================
  * Attendance (Phase 7, steps a and b): scan, day list, month view, manual entries
  * ===================================================================== */
