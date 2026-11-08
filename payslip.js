@@ -128,6 +128,76 @@
     return c;
   }
 
+  // Eid bonus receipt (same look as the payslip)
+  async function renderBonus(b, company, logoUrl) {
+    await fonts();
+    const logo = await loadImg(logoUrl);
+    const c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
+    const x = c.getContext('2d'); x.scale(S, S);
+    x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+    x.fillStyle = NAVY; x.fillRect(0, 0, W, 132);
+    x.fillStyle = ORANGE; x.fillRect(0, 132, W, 5);
+    x.fillStyle = '#fff'; rr(x, 40, 26, 80, 80, 14); x.fill();
+    if (logo) { const r = Math.min(68 / logo.width, 68 / logo.height); x.drawImage(logo, 46 + (68 - logo.width * r) / 2, 32 + (68 - logo.height * r) / 2, logo.width * r, logo.height * r); }
+    fit(x, company.name_bn || '', 700, 26, 16, 600, false); txt(x, company.name_bn || '', 142, 48, { color: '#fff' });
+    fit(x, company.name_en || '', 600, 15, 11, 600, true); txt(x, company.name_en || '', 142, 76, { color: '#C8D2F0' });
+    const contact = [company.address_bn, [company.phone_1, company.phone_2].filter(Boolean).map(toBn).join(', ')].filter(Boolean).join('  ·  ');
+    fit(x, contact, 400, 12, 9, 610, false); txt(x, contact, 142, 104, { color: '#C8D2F0' });
+    font(x, 700, 28, false); txt(x, 'ঈদ বোনাস রসিদ', 40, 178, { color: BLUE });
+    font(x, 600, 14, true); txt(x, 'EID BONUS RECEIPT', 40, 206, { color: MUTE });
+    fit(x, b.eid_name + ' ' + toBn(b.eid_date.slice(0, 4)), 700, 22, 14, 330, false); txt(x, b.eid_name + ' ' + toBn(b.eid_date.slice(0, 4)), W - 40, 178, { align: 'right', color: INK });
+    font(x, 600, 14, false); txt(x, 'ঈদের তারিখ · ' + dBn(b.eid_date), W - 40, 206, { align: 'right', color: MUTE });
+    x.fillStyle = SOFT; rr(x, 40, 232, W - 80, 138, 12); x.fill();
+    const col = [64, 420];
+    const cell = (cx, cy, bn, en, val, valEn) => {
+      font(x, 400, 11, false); txt(x, bn + ' · ' + en, cx, cy, { color: MUTE });
+      fit(x, val, 700, 17, 11, 320, false); txt(x, val, cx, cy + 22, { color: INK });
+      if (valEn) { fit(x, valEn, 400, 12, 9, 320, true); txt(x, valEn, cx, cy + 41, { color: MUTE }); }
+    };
+    cell(col[0], 254, 'নাম', 'Name', b.name_bn, b.name_en);
+    cell(col[1], 254, 'আইডি নং', 'ID No', b.employee_id, '');
+    cell(col[1], 322, 'পদবী', 'Designation', b.designation_bn || '—', b.designation_en);
+    cell(col[0], 322, 'যোগদানের তারিখ', 'Joining date', dBn(b.joining_date), '');
+    let y = 398;
+    x.fillStyle = BLUE; rr(x, 40, y, W - 80, 30, 8); x.fill(); font(x, 700, 15, false); txt(x, 'বোনাসের হিসাব', 56, y + 15, { color: '#fff' }); font(x, 600, 12, true); txt(x, 'Bonus calculation', W - 56, y + 15, { align: 'right', color: '#C8D2F0' }); y += 38;
+    const row = (bn, en, val, note) => {
+      const lines = note ? wrapLines((font(x, 400, 12, false), x), note, 470, 2) : [];
+      const h = lines.length ? 54 + lines.length * 16 : 46;
+      label(x, bn, en, 56, y + 14);
+      font(x, 600, 17, false); txt(x, val, W - 56, y + 18, { align: 'right', color: INK });
+      lines.forEach((l, i) => { font(x, 400, 12, false); txt(x, l, 56, y + 54 + i * 16, { color: MUTE }); });
+      y += h; x.strokeStyle = LINE; x.lineWidth = 1; x.beginPath(); x.moveTo(40, y); x.lineTo(W - 40, y); x.stroke();
+    };
+    const rule = b.source === 'rule';
+    if (rule) {
+      row('মাসিক বেতন', 'Monthly salary', tk(b.salary), 'বোনাস তৈরির দিনের সর্বশেষ পূর্ণ মাসিক বেতন');
+      row('বোনাসের হার', 'Bonus rate', toBn(b.percent) + '%', 'কর্তন বা অনুপস্থিতির কারণে বোনাস কমে না');
+      row('সেবার সময়', 'Service up to Eid', b.service_days === null || b.service_days === '' ? '—' : toBn(Math.floor(b.service_days / 365)) + ' বছর ' + toBn(b.service_days % 365) + ' দিন', 'ঈদের দিন পর্যন্ত; ন্যূনতম ১ বছর সেবা প্রয়োজন');
+    } else {
+      row('বোনাসের ধরন', 'Bonus type', 'বিশেষ সিদ্ধান্তে', 'মালিকপক্ষের সিদ্ধান্ত অনুযায়ী নির্ধারিত অঙ্ক');
+    }
+    y += 8; x.fillStyle = NAVY; rr(x, 40, y, W - 80, 62, 12); x.fill();
+    font(x, 700, 18, false); txt(x, 'ঈদ বোনাস', 60, y + 24, { color: '#fff' }); font(x, 600, 12, true); txt(x, 'Eid bonus amount', 60, y + 44, { color: '#C8D2F0' });
+    font(x, 700, 28, false); txt(x, tk(b.amount), W - 60, y + 31, { align: 'right', color: '#fff' });
+    x.fillStyle = ORANGE; x.fillRect(40, y + 62, W - 80, 4); y += 90;
+    x.fillStyle = BLUE; rr(x, 40, y, W - 80, 30, 8); x.fill(); font(x, 700, 15, false); txt(x, 'পরিশোধের তথ্য', 56, y + 15, { color: '#fff' }); font(x, 600, 12, true); txt(x, 'Payment', W - 56, y + 15, { align: 'right', color: '#C8D2F0' }); y += 44;
+    label(x, 'পরিশোধের নির্ধারিত তারিখ', 'Scheduled pay date', 56, y + 12); font(x, 700, 16, false); txt(x, dBn(b.pay_due_date), 56, y + 52, { color: INK });
+    label(x, 'পরিশোধের তারিখ', 'Paid on', 330, y + 12); font(x, 700, 16, false); txt(x, b.status === 'Paid' ? dBn(b.paid_date) : '—', 330, y + 52, { color: INK });
+    const paid = b.status === 'Paid';
+    x.textAlign = 'right'; font(x, 700, 15, false); x.fillStyle = paid ? '#067647' : '#B54708'; x.fillText(paid ? 'নগদে পরিশোধিত' : 'পরিশোধ বাকি', W - 56, y + 18);
+    font(x, 600, 11, true); x.fillStyle = MUTE; x.fillText(paid ? 'Paid in cash' : 'Unpaid', W - 56, y + 38);
+    y += 84;
+    const sy = Math.max(y + 40, 960);
+    x.strokeStyle = MUTE; x.lineWidth = 1;
+    [[56, 'গ্রহীতার স্বাক্ষর', "Receiver's signature"], [W - 56 - 230, 'অনুমোদনকারীর স্বাক্ষর', 'Authorized signature']].forEach(s => {
+      x.beginPath(); x.moveTo(s[0], sy); x.lineTo(s[0] + 230, sy); x.stroke();
+      font(x, 600, 13, false); txt(x, s[1], s[0] + 115, sy + 16, { align: 'center', color: INK }); font(x, 400, 11, true); txt(x, s[2], s[0] + 115, sy + 33, { align: 'center', color: MUTE });
+    });
+    font(x, 400, 11, false); txt(x, 'কম্পিউটারে তৈরি রসিদ · Computer-generated receipt', W / 2, H - 38, { align: 'center', color: MUTE });
+    x.fillStyle = ORANGE; x.fillRect(0, H - 14, W, 4); x.fillStyle = BLUE; x.fillRect(0, H - 10, W, 10);
+    return c;
+  }
+
   function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
   function pdf(canvases, name) {
     const doc = new jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -149,5 +219,5 @@
     }
     return pages;
   }
-  window.PAYSLIP = { render, pdf, layout };
+  window.PAYSLIP = { render, renderBonus, pdf, layout };
 })();
