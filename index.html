@@ -111,10 +111,10 @@ button.cell{cursor:pointer}button.cell:hover{transform:scale(1.12)}
 <div id="app" class="hide">
   <nav aria-label="প্রধান মেনু">
     <div class="brand"><div class="lg"><img src="logo.png" alt="" onerror="this.style.display='none'"></div><div><b>Royal Sales</b><small>HR ও বেতন ব্যবস্থাপনা</small></div></div>
-    <a class="soon" href="#">ড্যাশবোর্ড</a><a id="navAtt" href="#/attendance">হাজিরা</a>
+    <a id="navDash" href="#/dashboard">ড্যাশবোর্ড</a><a id="navAtt" href="#/attendance">হাজিরা</a>
     <a id="navEmp" href="#/employees">কর্মচারী</a>
     <a id="navLeave" href="#/leave">ছুটি</a><a id="navPay" class="hide" href="#/payroll">বেতন</a><a id="navEid" class="hide" href="#/eid">ঈদ বোনাস</a>
-    <a id="navLoan" class="hide" href="#/loans">অগ্রিম ও ধার</a><a id="navCash" class="hide" href="#/cash">নগদ হিসাব</a><a id="navRev" class="hide" href="#/reviews">রিভিউ ও সতর্কবার্তা</a><a id="navNot" class="hide" href="#/notices">নোটিশ</a>
+    <a id="navLoan" class="hide" href="#/loans">অগ্রিম ও ধার</a><a id="navCash" class="hide" href="#/cash">নগদ হিসাব</a><a id="navRev" class="hide" href="#/reviews">রিভিউ ও সতর্কবার্তা</a><a id="navNot" class="hide" href="#/notices">নোটিশ</a><a id="navRep" class="hide" href="#/reports">রিপোর্ট</a>
     <a id="navUsers" class="hide" href="#/users">ব্যবহারকারী</a>
     <a id="navDes" class="hide" href="#/designations">পদবী</a>
     <a id="navCards" class="hide" href="#/cards">আইডি কার্ড</a>
@@ -169,7 +169,7 @@ async function start(){
     $('navEid').classList.remove('hide'); $('navEid').textContent=(ME.can.sa||ME.role==='Owner')?'ঈদ বোনাস':'আমার ঈদ বোনাস';
     $('navLoan').classList.remove('hide'); $('navLoan').textContent=(ME.can.sa||ME.role==='Owner')?'অগ্রিম ও ধার':'আমার অগ্রিম ও ধার';
     $('navCash').classList.toggle('hide', !(ME.can.sa||ME.role==='Owner'));
-    $('navRev').classList.remove('hide'); $('navNot').classList.remove('hide');
+    $('navRev').classList.remove('hide'); $('navNot').classList.remove('hide'); $('navRep').classList.toggle('hide', !(ME.can.sa||ME.role==='Owner'));
     $('navDes').classList.toggle('hide', !ME.can.sa);
     $('navCards').classList.toggle('hide', !ME.can.sa);
     $('navCo').classList.toggle('hide', !ME.can.sa);
@@ -210,11 +210,13 @@ let hideTimer=null;
 function autoHide(fn){ clearTimeout(hideTimer); hideTimer=setTimeout(fn,60000); }
 function route(){
   clearTimeout(hideTimer); stopCam();
-  const h = location.hash || '#/employees';
+  const h = location.hash || '#/dashboard';
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   const m = h.match(/^#\/employee\/(.+)$/);
   const vw=$('view'); vw.classList.remove('enter'); void vw.offsetWidth; vw.classList.add('enter');
   if(h==='#/eid'){ $('navEid').classList.add('on'); eidPage(); return; }
+  if(h==='#/dashboard'){ $('navDash').classList.add('on'); dashboardPage(); return; }
+  if(h==='#/reports'){ $('navRep').classList.add('on'); reportsPage(); return; }
   if(h==='#/loans'){ $('navLoan').classList.add('on'); loansPage(); return; }
   if(h==='#/cash'){ $('navCash').classList.add('on'); cashPage(); return; }
   if(h==='#/reviews'){ $('navRev').classList.add('on'); reviewsPage(); return; }
@@ -940,6 +942,85 @@ async function noticesPage(){
   }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">নোটিশ</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
 }
 /*P10_END*/
+/*P12_BEGIN*/
+/* =====================================================================
+ * Phase 12: dashboard and reports
+ * ===================================================================== */
+async function dashboardPage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{ DASH.data=await api('dash.summary',{}); dashDraw(); }
+  catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">ড্যাশবোর্ড</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
+}
+const DASH={ data:null };
+function dashDraw(){
+  const D=DASH.data, v=$('view'), card=(title,body,href)=>'<div class="card" style="margin:0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0 0 8px">'+title+'</h3>'+(href?'<a href="'+href+'" style="font-size:13px;font-weight:600">খুলুন →</a>':'')+'</div>'+body+'</div>';
+  const kv=(l,x)=>'<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="muted">'+l+'</span><b>'+x+'</b></div>';
+  const M=D.my, cards=[];
+  cards.push(card('আমার আজকের অবস্থা',kv('হাজিরা','<span class="st st-'+M.att+'">'+esc(ST[M.att]||'—')+'</span>')+(M.pay?kv('সর্বশেষ বেতন ('+pmLabel(M.pay.month)+')',pm(M.pay.net))+kv('বাকি',M.pay.due?pm(M.pay.due):'পরিশোধিত'):'')+(M.loan_balance>0?kv('অগ্রিম/ধারের বাকি',pm(M.loan_balance)):'')+(M.bonus?kv('ঈদ বোনাস ('+esc(M.bonus.eid_name)+' '+bnd(M.bonus.year)+')',pm(M.bonus.amount)+' · '+(M.bonus.status==='Paid'?'পরিশোধিত':'বাকি')):''),'#/payroll'));
+  if(D.all){
+    const a=D.att;
+    cards.unshift(card('আজকের হাজিরা',kv('উপস্থিত',bnd(a.present)+' / '+bnd(a.total))+kv('এখন কাজে আছেন',bnd(a.working))+kv('এখনও আসেননি',bnd(a.not_yet))+kv('ছুটিতে',bnd(a.leave))+(a.holiday?kv('ছুটির দিন',bnd(a.holiday)):'')+(a.list_absent.length?'<p class="muted" style="margin:8px 0 0">আসেননি: '+esc(a.list_absent.join(', '))+'</p>':''),'#/attendance'));
+    const P=D.payroll;
+    cards.push(card('বেতন — '+pmLabel(P.month),kv('চূড়ান্ত হয়েছে',bnd(P.finalized)+' / '+bnd(P.expected)+' জন')+kv('মোট প্রদেয়',pm(P.net))+kv('পরিশোধিত',pm(P.paid))+kv('বাকি',P.due?pm(P.due):'—')+(P.finalized<P.expected?'<p class="muted" style="margin:8px 0 0">⚠ '+bnd(P.expected-P.finalized)+' জনের হিসাব এখনও চূড়ান্ত হয়নি।</p>':''),'#/payroll'));
+    const C=D.cash;
+    cards.push(card('নগদ — আজ',kv('শুরুর ব্যালেন্স',pm(C.opening))+kv('জমা',pm(C.total_in))+kv('খরচ',pm(C.total_out))+kv('এখনকার ব্যালেন্স',pm(C.closing))+kv('দিন বন্ধ',C.closed?'হ্যাঁ':'না'),'#/cash'));
+    cards.push(card('অগ্রিম ও ধার',kv('বাকি আছে এমন এন্ট্রি',bnd(D.loans.active))+kv('মোট বাকি',pm(D.loans.balance)),'#/loans'));
+    const E=D.eid;
+    cards.push(card('আসন্ন ঈদ',E?kv(esc(E.eid_name),esc(fmtD(E.eid_date)))+kv('আর বাকি',bnd(E.days_left)+' দিন')+kv('বোনাস দেওয়ার তারিখ',esc(fmtD(E.pay_due_date)))+kv('চূড়ান্ত বোনাস',E.finalized?bnd(E.finalized)+' জন · '+pm(E.total):'এখনও না')+(E.finalized?kv('পরিশোধিত',pm(E.paid)):''):'<p class="muted">কোনো আসন্ন ঈদ যোগ করা নেই।</p>','#/eid'));
+  }
+  cards.push(card('নোটিশ',D.notices.length?D.notices.map(n=>'<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>'+esc(n.title)+'</b> <span class="muted">'+esc(fmtD(n.date))+'</span><div style="white-space:pre-wrap">'+esc(n.body.length>140?n.body.slice(0,140)+'…':n.body)+'</div></div>').join(''):'<p class="muted">এখন কোনো নোটিশ নেই।</p>','#/notices'));
+  v.innerHTML='<h1 class="t">ড্যাশবোর্ড</h1><div class="sub">আজ '+esc(fmtD(D.today))+(M.name_bn?' · স্বাগতম, '+esc(M.name_bn):'')+'</div>'+(D.all?eyeLine():'')+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+cards.join('')+'</div>';
+  if(D.all) eyeBind(v,'#/dashboard',dashDraw);
+}
+
+const REP={ type:'payroll', month:'', eid:'', opts:null, data:null };
+const REPTYPES=[['payroll','বেতন সারাংশ (মাস)'],['attendance','হাজিরা সারাংশ (মাস)'],['cash','নগদ হিসাব (মাস)'],['loans','অগ্রিম ও ধারের বাকি'],['eid','ঈদ বোনাস']];
+async function reportsPage(){
+  const v=$('view'); v.innerHTML='<p class="muted">লোড হচ্ছে...</p>';
+  try{
+    REP.opts=await api('report.options',{});
+    if(!REP.month) REP.month=pmShift(REP.opts.today.slice(0,7),REP.type==='payroll'?-1:0);
+    if(!REP.eid&&REP.opts.eids.length) REP.eid=REP.opts.eids[0].eid_id;
+    repDraw();
+  }catch(e){ if(isAuthErr(e)) fail(e); else v.innerHTML='<h1 class="t">রিপোর্ট</h1><div class="err" role="alert">'+esc(errText(e))+'</div>'; }
+}
+function repDraw(){
+  const v=$('view'), t=REP.type, needM=['payroll','attendance','cash'].includes(t);
+  v.innerHTML='<h1 class="t">রিপোর্ট</h1><div class="sub">রিপোর্ট বেছে দেখুন, তারপর Excel-এ খোলার মতো CSV ফাইল নামান। টেবিলে অঙ্ক চোখের আইকন দিয়ে দেখা যায়; CSV ফাইলে পুরো অঙ্ক থাকে।</div><div id="rpMsg" role="alert"></div>'+
+    '<div class="card"><div class="grid"><div class="fld"><label for="rp_t">রিপোর্ট</label><select id="rp_t">'+REPTYPES.map(x=>'<option value="'+x[0]+'"'+(x[0]===t?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div>'+
+    (needM?'<div class="fld"><label for="rp_m">মাস</label><input id="rp_m" type="month" value="'+REP.month+'" max="'+REP.opts.today.slice(0,7)+'"></div>':'')+
+    (t==='eid'?'<div class="fld"><label for="rp_e">ঈদ</label><select id="rp_e">'+(REP.opts.eids.length?REP.opts.eids.map(e=>'<option value="'+esc(e.eid_id)+'"'+(e.eid_id===REP.eid?' selected':'')+'>'+esc(e.label)+'</option>').join(''):'<option value="">কোনো ঈদ নেই</option>')+'</select></div>':'')+'</div>'+
+    '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" id="rpGo">রিপোর্ট দেখুন</button><button class="btn" id="rpCsv"'+(REP.data&&REP.data.type===t?'':' disabled')+'>CSV নামান</button></div></div>'+
+    '<div id="rpOut"></div>';
+  $('rp_t').onchange=()=>{ REP.type=$('rp_t').value; REP.data=null; if(REP.type==='payroll'&&REP.month>=REP.opts.today.slice(0,7)) REP.month=pmShift(REP.opts.today.slice(0,7),-1); repDraw(); };
+  const m=$('rp_m'); if(m) m.onchange=()=>{ if(m.value) REP.month=m.value; };
+  const e=$('rp_e'); if(e) e.onchange=()=>{ REP.eid=e.value; };
+  $('rpGo').onclick=async()=>{
+    try{ REP.data=await api('report.get',{type:t,month:needM?REP.month:undefined,eid_id:t==='eid'?REP.eid:undefined}); repDraw(); repShow(); }
+    catch(er){ if(isAuthErr(er)) fail(er); else { const b=$('rpMsg'); b.textContent=errText(er); b.className='err'; } }
+  };
+  $('rpCsv').onclick=repCsv;
+  if(REP.data&&REP.data.type===t) repShow();
+}
+const repVal=(c,r)=>{ const x=r[c.k]; if(c.money) return x===null||x===undefined||x===''?'—':(PAYS.shown?'৳ '+bnd(Number(x).toLocaleString('en-US',{maximumFractionDigits:2})):MASK); if(c.k==='date'||c.k==='paid_date') return x?fmtD(x):''; if(c.k==='category') return CASHCAT[x]||x; return typeof x==='number'?bnd(x):(x===undefined||x===null?'':x); };
+function repShow(){
+  const D=REP.data, o=$('rpOut'); if(!o||!D) return;
+  o.innerHTML='<div class="card"><h2 style="margin-top:0">'+esc(D.title)+'</h2>'+eyeLine()+(D.note?'<p class="muted">'+esc(D.note)+'</p>':'')+
+    '<div class="tw"><table><thead><tr>'+D.columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')+'</tr></thead><tbody>'+
+    (D.rows.length?D.rows.map(r=>'<tr>'+D.columns.map(c=>'<td>'+esc(String(repVal(c,r)))+'</td>').join('')+'</tr>').join(''):'<tr><td colspan="'+D.columns.length+'" class="muted">এই রিপোর্টে কোনো তথ্য নেই।</td></tr>')+'</tbody>'+
+    (D.columns.some(c=>c.money)&&D.rows.length?'<tfoot><tr>'+D.columns.map((c,i)=>'<td style="font-weight:700">'+(i===0?'মোট':c.money?esc(repVal(c,{[c.k]:D.rows.reduce((a,r)=>a+(Number(r[c.k])||0),0)})):'')+'</td>').join('')+'</tr></tfoot>':'')+'</table></div></div>';
+  eyeBind(o,'#/reports',()=>{ repShow(); });
+}
+function repCsv(){
+  const D=REP.data; if(!D) return;
+  const q=x=>'"'+String(x===undefined||x===null?'':x).replace(/"/g,'""')+'"';
+  const val=(c,r)=>{ const x=r[c.k]; if(c.k==='category') return CASHCAT[x]||x; return x; };
+  const lines=[D.columns.map(c=>q(c.label)).join(',')].concat(D.rows.map(r=>D.columns.map(c=>q(val(c,r))).join(',')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='report_'+D.type+'_'+(REP.type==='eid'?REP.eid:REP.type==='loans'?todayStr():REP.month)+'.csv'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500);
+}
+/*P12_END*/
 /* =====================================================================
  * Attendance (Phase 7, steps a and b): scan, day list, month view, manual entries
  * ===================================================================== */
