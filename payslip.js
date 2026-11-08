@@ -89,6 +89,7 @@
     const ded = slip.deductions || [];
     row('অনুপস্থিতির কর্তন', 'Absence deduction', slip.deduction ? '− ' + tk(slip.deduction) : '—',
       ded.length ? toBn(ded.length) + ' দিন: ' + ded.map(d => toBn(+d.date.slice(8)) + ' তারিখ' + (d.note ? ' (' + d.note + ')' : '')).join(', ') : 'কোনো কর্তন নেই');
+    if (slip.loan_deduction > 0) row('অগ্রিম/ধার কর্তন', 'Advance / loan deduction', '− ' + tk(slip.loan_deduction), 'আগে নেওয়া অগ্রিম বা ধারের মাসিক কিস্তি');
     // net band
     y += 8; x.fillStyle = NAVY; rr(x, 40, y, W - 80, 62, 12); x.fill();
     font(x, 700, 18, false); txt(x, 'প্রদেয় বেতন', 60, y + 24, { color: '#fff' }); font(x, 600, 12, true); txt(x, 'Net payable', 60, y + 44, { color: '#C8D2F0' });
